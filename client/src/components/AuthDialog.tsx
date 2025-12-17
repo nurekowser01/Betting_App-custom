@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Gamepad2, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +23,14 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return;
+    if (!username.trim() || !password.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter both username and password",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -48,6 +55,12 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
     }
   };
 
+  const handleTabChange = (value: string) => {
+    setTab(value as "login" | "register");
+    setUsername("");
+    setPassword("");
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -56,69 +69,48 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
             <Gamepad2 className="h-6 w-6 text-primary" />
             GameStake
           </DialogTitle>
+          <DialogDescription className="text-center">
+            {tab === "login" ? "Sign in to your account" : "Create a new account to start betting"}
+          </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "login" | "register")}>
+        <Tabs value={tab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="login" data-testid="tab-login">Login</TabsTrigger>
             <TabsTrigger value="register" data-testid="tab-register">Register</TabsTrigger>
           </TabsList>
-
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-            <TabsContent value="login" className="space-y-4 mt-0">
-              <div className="space-y-2">
-                <Label htmlFor="login-username">Username</Label>
-                <Input
-                  id="login-username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your username"
-                  data-testid="input-login-username"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="login-password">Password</Label>
-                <Input
-                  id="login-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  data-testid="input-login-password"
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="register" className="space-y-4 mt-0">
-              <div className="space-y-2">
-                <Label htmlFor="register-username">Username</Label>
-                <Input
-                  id="register-username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Choose a username"
-                  data-testid="input-register-username"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="register-password">Password</Label>
-                <Input
-                  id="register-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create a password"
-                  data-testid="input-register-password"
-                />
-              </div>
-            </TabsContent>
-
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-auth-submit">
-              {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {tab === "login" ? "Login" : "Create Account"}
-            </Button>
-          </form>
         </Tabs>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={tab === "login" ? "Enter your username" : "Choose a username"}
+              data-testid="input-username"
+              autoComplete="username"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={tab === "login" ? "Enter your password" : "Create a password"}
+              data-testid="input-password"
+              autoComplete={tab === "login" ? "current-password" : "new-password"}
+            />
+          </div>
+
+          <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-auth-submit">
+            {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {tab === "login" ? "Login" : "Create Account"}
+          </Button>
+        </form>
       </DialogContent>
     </Dialog>
   );
