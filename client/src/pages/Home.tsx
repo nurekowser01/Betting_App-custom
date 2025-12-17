@@ -78,8 +78,11 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       toast({ title: "Match Created", description: "Waiting for an opponent to join" });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create match", variant: "destructive" });
+    onError: (error: any) => {
+      const message = error.message?.includes("Insufficient") 
+        ? "Insufficient funds. Please deposit money first." 
+        : error.message || "Failed to create match";
+      toast({ title: "Error", description: message, variant: "destructive" });
     },
   });
 
