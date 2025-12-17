@@ -1,4 +1,4 @@
-import { ArrowUpRight, ArrowDownLeft, Lock, Trophy, Gamepad2 } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, Lock, Trophy, Gamepad2, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Transaction } from "@/lib/types";
 
@@ -12,6 +12,7 @@ const typeConfig = {
   bet: { icon: Gamepad2, color: "text-chart-1", label: "Bet" },
   winnings: { icon: Trophy, color: "text-chart-4", label: "Winnings" },
   escrow: { icon: Lock, color: "text-chart-2", label: "Escrow" },
+  refund: { icon: RotateCcw, color: "text-chart-3", label: "Refund" },
 };
 
 export function TransactionList({ transactions }: TransactionListProps) {
@@ -23,7 +24,8 @@ export function TransactionList({ transactions }: TransactionListProps) {
         transactions.map((tx) => {
           const config = typeConfig[tx.type];
           const Icon = config.icon;
-          const isPositive = tx.type === 'deposit' || tx.type === 'winnings';
+          const isPositive = tx.type === 'deposit' || tx.type === 'winnings' || tx.type === 'refund';
+          const date = new Date(tx.createdAt);
 
           return (
             <div
@@ -38,17 +40,14 @@ export function TransactionList({ transactions }: TransactionListProps) {
                 <div>
                   <p className="text-sm font-medium">{tx.description}</p>
                   <p className="text-xs text-muted-foreground">
-                    {tx.createdAt.toLocaleDateString()} at {tx.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className={`font-bold tabular-nums ${isPositive ? 'text-chart-3' : ''}`}>
-                  {isPositive ? '+' : '-'}${Math.abs(tx.amount).toFixed(2)}
+                  {isPositive ? '+' : '-'}${parseFloat(tx.amount).toFixed(2)}
                 </span>
-                <Badge variant={tx.status === 'completed' ? 'secondary' : 'outline'} className="text-xs">
-                  {tx.status}
-                </Badge>
               </div>
             </div>
           );

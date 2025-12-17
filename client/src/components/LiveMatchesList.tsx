@@ -1,14 +1,34 @@
 import { MatchCard } from "./MatchCard";
 import { Badge } from "@/components/ui/badge";
 import { Eye } from "lucide-react";
-import type { Match } from "@/lib/types";
 
-interface LiveMatchesListProps {
-  matches: Match[];
-  onSpectate?: (matchId: string) => void;
+interface Player {
+  id: string;
+  username: string;
 }
 
-export function LiveMatchesList({ matches, onSpectate }: LiveMatchesListProps) {
+interface MatchForList {
+  id: string;
+  game: string;
+  betAmount: string;
+  status: 'waiting' | 'live' | 'completed' | 'cancelled';
+  player1Id: string;
+  player2Id?: string | null;
+  winnerId?: string | null;
+  spectatorCount: number;
+  createdAt: string;
+  player1?: Player | null;
+  player2?: Player | null;
+}
+
+interface LiveMatchesListProps {
+  matches: MatchForList[];
+  onSpectate?: (matchId: string) => void;
+  onComplete?: (matchId: string) => void;
+  currentUserId?: string;
+}
+
+export function LiveMatchesList({ matches, onSpectate, onComplete, currentUserId }: LiveMatchesListProps) {
   const liveMatches = matches.filter(m => m.status === 'live');
   const totalSpectators = liveMatches.reduce((sum, m) => sum + m.spectatorCount, 0);
 
@@ -40,6 +60,8 @@ export function LiveMatchesList({ matches, onSpectate }: LiveMatchesListProps) {
               key={match.id}
               match={match}
               onSpectate={() => onSpectate?.(match.id)}
+              onComplete={() => onComplete?.(match.id)}
+              currentUserId={currentUserId}
             />
           ))}
         </div>

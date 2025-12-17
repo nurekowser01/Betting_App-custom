@@ -1,48 +1,52 @@
 export type WalletType = 'personal' | 'escrow' | 'spectator';
 
-export interface Wallet {
-  id: string;
-  type: WalletType;
-  balance: number;
-  userId: string;
-}
-
 export interface User {
   id: string;
   username: string;
-  avatar?: string;
 }
 
-export type MatchStatus = 'waiting' | 'live' | 'completed';
+export interface Wallet {
+  id: string;
+  userId: string;
+  type: WalletType;
+  balance: string;
+}
+
+export type MatchStatus = 'waiting' | 'live' | 'completed' | 'cancelled';
 
 export interface Match {
   id: string;
   game: string;
-  betAmount: number;
+  betAmount: string;
   status: MatchStatus;
-  player1: User;
-  player2?: User;
-  winner?: string;
+  player1Id: string;
+  player2Id?: string | null;
+  winnerId?: string | null;
   spectatorCount: number;
-  createdAt: Date;
+  createdAt: string;
+  player1?: { id: string; username: string } | null;
+  player2?: { id: string; username: string } | null;
+  winner?: { id: string; username: string } | null;
 }
 
 export interface SpectatorBet {
   id: string;
   matchId: string;
   userId: string;
-  predictedWinner: string;
-  amount: number;
+  predictedWinnerId: string;
+  amount: string;
   status: 'pending' | 'won' | 'lost';
+  createdAt: string;
 }
 
 export interface Transaction {
   id: string;
-  type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow';
-  amount: number;
+  userId: string;
+  walletId: string;
+  type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund';
+  amount: string;
   description: string;
-  createdAt: Date;
-  status: 'completed' | 'pending';
+  createdAt: string;
 }
 
 export const PLAYSTATION_GAMES = [

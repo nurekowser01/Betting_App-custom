@@ -10,16 +10,21 @@ interface MatchCardProps {
   onJoin?: () => void;
   onSpectate?: () => void;
   onViewResults?: () => void;
+  onComplete?: () => void;
+  currentUserId?: string;
 }
 
 const statusConfig = {
   waiting: { label: "Waiting", variant: "secondary" as const },
   live: { label: "Live", variant: "destructive" as const },
   completed: { label: "Completed", variant: "outline" as const },
+  cancelled: { label: "Cancelled", variant: "outline" as const },
 };
 
-export function MatchCard({ match, onJoin, onSpectate, onViewResults }: MatchCardProps) {
+export function MatchCard({ match, onJoin, onSpectate, onViewResults, onComplete, currentUserId }: MatchCardProps) {
   const status = statusConfig[match.status];
+  const betAmount = parseFloat(match.betAmount);
+  const isParticipant = currentUserId && (match.player1Id === currentUserId || match.player2Id === currentUserId);
 
   return (
     <Card className="overflow-visible" data-testid={`card-match-${match.id}`}>
@@ -49,13 +54,13 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults }: MatchCar
           <div className="flex flex-col items-center flex-1">
             <Avatar className="h-12 w-12 mb-2">
               <AvatarFallback className="bg-primary text-primary-foreground">
-                {match.player1.username.slice(0, 2).toUpperCase()}
+                {match.player1?.username?.slice(0, 2).toUpperCase() || 'P1'}
               </AvatarFallback>
             </Avatar>
             <span className="text-sm font-medium truncate max-w-full" data-testid="text-player1">
-              {match.player1.username}
+              {match.player1?.username || 'Player 1'}
             </span>
-            {match.winner === match.player1.id && (
+            {match.winnerId === match.player1Id && (
               <Trophy className="h-4 w-4 text-chart-4 mt-1" />
             )}
           </div>
@@ -63,7 +68,7 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults }: MatchCar
           <div className="flex flex-col items-center">
             <span className="text-lg font-bold text-muted-foreground">VS</span>
             <span className="text-xl font-bold text-primary" data-testid="text-bet-amount">
-              ${match.betAmount}
+              ${betAmount.toFixed(0)}
             </span>
           </div>
 
@@ -78,7 +83,7 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults }: MatchCar
                 <span className="text-sm font-medium truncate max-w-full" data-testid="text-player2">
                   {match.player2.username}
                 </span>
-                {match.winner === match.player2.id && (
+                {match.winnerId === match.player2Id && (
                   <Trophy className="h-4 w-4 text-chart-4 mt-1" />
                 )}
               </>
@@ -94,21 +99,32 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults }: MatchCar
         </div>
 
         <div className="flex gap-2">
-          {match.status === 'waiting' && !match.player2 && (
+          {match.status === 'waiting' && !match.player2 && !isParticipant && (
             <Button className="flex-1" onClick={onJoin} data-testid="button-join-match">
               Join Match
             </Button>
           )}
-          {match.status === 'live' && (
+          {match.status === 'live' && !isParticipant && (
             <Button className="flex-1" variant="outline" onClick={onSpectate} data-testid="button-spectate">
               <Eye className="h-4 w-4 mr-2" />
               Watch & Bet
+            </Button>
+          )}
+          {match.status === 'live' && isParticipant && (
+            <Button className="flex-1" onClick={onComplete} data-testid="button-complete-match">
+              <Trophy className="h-4 w-4 mr-2" />
+              Report Result
             </Button>
           )}
           {match.status === 'completed' && (
             <Button className="flex-1" variant="secondary" onClick={onViewResults} data-testid="button-view-results">
               View Results
             </Button>
+          )}
+          {match.status === 'waiting' && isParticipant && (
+            <Badge variant="secondary" className="flex-1 justify-center py-2">
+              Your Match - Waiting for opponent
+            </Badge>
           )}
         </div>
       </CardContent>

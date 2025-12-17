@@ -3,23 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Gamepad2, Menu, User, LogOut, History, Settings, Wallet } from "lucide-react";
+import { Gamepad2, Menu, User, LogOut, History, Wallet, LogIn } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link } from "wouter";
 
 interface NavbarProps {
-  username?: string;
+  username?: string | null;
   balance?: number;
   onLogout?: () => void;
+  onLogin?: () => void;
 }
 
-export function Navbar({ username = "Player1", balance = 0, onLogout }: NavbarProps) {
+export function Navbar({ username, balance = 0, onLogout, onLogin }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navLinks = [
     { label: "Matches", href: "/" },
-    { label: "Live", href: "/live" },
-    { label: "My Bets", href: "/my-bets" },
   ];
 
   return (
@@ -44,50 +43,55 @@ export function Navbar({ username = "Player1", balance = 0, onLogout }: NavbarPr
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted">
-              <Wallet className="h-4 w-4 text-primary" />
-              <span className="font-bold tabular-nums" data-testid="text-nav-balance">
-                ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
+            {username && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted">
+                <Wallet className="h-4 w-4 text-primary" />
+                <span className="font-bold tabular-nums" data-testid="text-nav-balance">
+                  ${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
 
             <ThemeToggle />
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                      {username.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <div className="px-2 py-1.5">
-                  <p className="font-medium">{username}</p>
-                  <p className="text-sm text-muted-foreground sm:hidden">${balance.toFixed(2)}</p>
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem data-testid="menu-item-profile">
-                  <User className="h-4 w-4 mr-2" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem data-testid="menu-item-history">
-                  <History className="h-4 w-4 mr-2" />
-                  Transaction History
-                </DropdownMenuItem>
-                <DropdownMenuItem data-testid="menu-item-settings">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout} data-testid="menu-item-logout">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {username ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                        {username.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <div className="px-2 py-1.5">
+                    <p className="font-medium">{username}</p>
+                    <p className="text-sm text-muted-foreground sm:hidden">${balance.toFixed(2)}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem data-testid="menu-item-profile">
+                    <User className="h-4 w-4 mr-2" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem data-testid="menu-item-history">
+                    <History className="h-4 w-4 mr-2" />
+                    Transaction History
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onLogout} data-testid="menu-item-logout">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button onClick={onLogin} data-testid="button-login">
+                <LogIn className="h-4 w-4 mr-2" />
+                Login
+              </Button>
+            )}
 
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild className="md:hidden">

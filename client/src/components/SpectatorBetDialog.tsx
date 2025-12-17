@@ -4,10 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import type { Match } from "@/lib/types";
+
+interface Player {
+  id: string;
+  username: string;
+}
+
+interface MatchForBetting {
+  id: string;
+  game: string;
+  betAmount: string;
+  player1: Player;
+  player2?: Player;
+}
 
 interface SpectatorBetDialogProps {
-  match: Match;
+  match: MatchForBetting;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPlaceBet?: (playerId: string, amount: number) => void;
@@ -21,7 +33,6 @@ export function SpectatorBetDialog({ match, open, onOpenChange, onPlaceBet, maxB
   const handlePlaceBet = () => {
     if (selectedPlayer) {
       onPlaceBet?.(selectedPlayer, betAmount);
-      onOpenChange(false);
       setSelectedPlayer(null);
       setBetAmount(25);
     }
