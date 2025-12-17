@@ -50,13 +50,15 @@ export async function registerRoutes(
   app.post("/api/auth/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: Express.User | false, info: any) => {
       if (err) {
+        console.error("Login authentication error:", err);
         return res.status(500).json({ message: "Login failed" });
       }
       if (!user) {
         return res.status(401).json({ message: info?.message || "Invalid credentials" });
       }
-      req.login(user, (err) => {
-        if (err) {
+      req.login(user, (loginErr) => {
+        if (loginErr) {
+          console.error("Session login error:", loginErr);
           return res.status(500).json({ message: "Login failed" });
         }
         res.json({ id: user.id, username: user.username });
