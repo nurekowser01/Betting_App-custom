@@ -163,11 +163,13 @@ export async function registerRoutes(
         const player1 = await storage.getUser(match.player1Id);
         const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
         const winner = match.winnerId ? await storage.getUser(match.winnerId) : null;
+        const proposedBy = match.proposedByUserId ? await storage.getUser(match.proposedByUserId) : null;
         return {
           ...match,
           player1: player1 ? { id: player1.id, username: player1.username } : null,
           player2: player2 ? { id: player2.id, username: player2.username } : null,
           winner: winner ? { id: winner.id, username: winner.username } : null,
+          proposedBy: proposedBy ? { id: proposedBy.id, username: proposedBy.username } : null,
         };
       }));
 
@@ -259,6 +261,181 @@ export async function registerRoutes(
       res.json(updatedMatch);
     } catch (error) {
       res.status(500).json({ message: "Failed to join match" });
+    }
+  });
+
+  // Cancel match (creator only, if no one joined)
+  app.post("/api/matches/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.player1Id !== req.user!.id) {
+        return res.status(403).json({ message: "Only the creator can cancel" });
+      }
+
+      if (match.status !== "waiting") {
+        return res.status(400).json({ message: "Can only cancel waiting matches" });
+      }
+
+      if (match.player2Id) {
+        return res.status(400).json({ message: "Cannot cancel after someone joined" });
+      }
+
+      // Refund creator from escrow
+      const escrowWallet = await storage.getWalletByUserAndType(req.user!.id, "escrow");
+      const personalWallet = await storage.getWalletByUserAndType(req.user!.id, "personal");
+
+      if (!escrowWallet || !personalWallet) {
+        return res.status(400).json({ message: "Wallets not found" });
+      }
+
+      const betAmount = parseFloat(match.betAmount);
+      const newEscrowBalance = (parseFloat(escrowWallet.balance) - betAmount).toFixed(2);
+      const newPersonalBalance = (parseFloat(personalWallet.balance) + betAmount).toFixed(2);
+
+      await storage.updateWalletBalance(escrowWallet.id, newEscrowBalance);
+      await storage.updateWalletBalance(personalWallet.id, newPersonalBalance);
+      await storage.createTransaction(req.user!.id, personalWallet.id, "refund", betAmount.toFixed(2), `Cancelled match: ${match.game}`);
+
+      const cancelledMatch = await storage.cancelMatch(match.id);
+      res.json(cancelledMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to cancel match" });
+    }
+  });
+
+  // Propose different amount when joining
+  app.post("/api/matches/:id/propose", requireAuth, async (req, res) => {
+    try {
+      const { proposedAmount } = req.body;
+      const match = await storage.getMatch(req.params.id);
+
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.status !== "waiting") {
+        return res.status(400).json({ message: "Match is not available" });
+      }
+
+      if (match.player1Id === req.user!.id) {
+        return res.status(400).json({ message: "Cannot propose on your own match" });
+      }
+
+      if (match.proposedByUserId) {
+        return res.status(400).json({ message: "There is already a pending proposal" });
+      }
+
+      const amount = parseFloat(proposedAmount);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Invalid amount" });
+      }
+
+      const updatedMatch = await storage.proposeAmount(match.id, amount.toFixed(2), req.user!.id);
+      res.json(updatedMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to propose amount" });
+    }
+  });
+
+  // Creator accepts proposal
+  app.post("/api/matches/:id/accept-proposal", requireAuth, async (req, res) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.player1Id !== req.user!.id) {
+        return res.status(403).json({ message: "Only the creator can accept proposals" });
+      }
+
+      if (!match.proposedAmount || !match.proposedByUserId) {
+        return res.status(400).json({ message: "No pending proposal" });
+      }
+
+      const proposedAmount = parseFloat(match.proposedAmount);
+      const originalAmount = parseFloat(match.betAmount);
+
+      // Refund creator's original escrow and put new amount
+      const creatorEscrowWallet = await storage.getWalletByUserAndType(match.player1Id, "escrow");
+      const creatorPersonalWallet = await storage.getWalletByUserAndType(match.player1Id, "personal");
+
+      if (!creatorEscrowWallet || !creatorPersonalWallet) {
+        return res.status(400).json({ message: "Creator wallets not found" });
+      }
+
+      // Calculate difference and adjust creator's wallets
+      const difference = proposedAmount - originalAmount;
+      const creatorPersonalBalance = parseFloat(creatorPersonalWallet.balance);
+
+      if (difference > 0 && creatorPersonalBalance < difference) {
+        return res.status(400).json({ message: "Insufficient funds to match the proposed amount" });
+      }
+
+      // Adjust creator's escrow to new amount
+      const newCreatorEscrow = (parseFloat(creatorEscrowWallet.balance) + difference).toFixed(2);
+      const newCreatorPersonal = (creatorPersonalBalance - difference).toFixed(2);
+
+      await storage.updateWalletBalance(creatorEscrowWallet.id, newCreatorEscrow);
+      await storage.updateWalletBalance(creatorPersonalWallet.id, newCreatorPersonal);
+
+      if (difference !== 0) {
+        const txType = difference > 0 ? "escrow" : "refund";
+        const txAmount = Math.abs(difference).toFixed(2);
+        await storage.createTransaction(match.player1Id, difference > 0 ? creatorEscrowWallet.id : creatorPersonalWallet.id, txType, txAmount, `Bet amount adjusted: ${match.game}`);
+      }
+
+      // Joiner pays the proposed amount
+      const joinerPersonalWallet = await storage.getWalletByUserAndType(match.proposedByUserId, "personal");
+      const joinerEscrowWallet = await storage.getWalletByUserAndType(match.proposedByUserId, "escrow");
+
+      if (!joinerPersonalWallet || !joinerEscrowWallet) {
+        return res.status(400).json({ message: "Joiner wallets not found" });
+      }
+
+      const joinerBalance = parseFloat(joinerPersonalWallet.balance);
+      if (joinerBalance < proposedAmount) {
+        return res.status(400).json({ message: "Joiner has insufficient funds" });
+      }
+
+      const newJoinerPersonal = (joinerBalance - proposedAmount).toFixed(2);
+      const newJoinerEscrow = (parseFloat(joinerEscrowWallet.balance) + proposedAmount).toFixed(2);
+
+      await storage.updateWalletBalance(joinerPersonalWallet.id, newJoinerPersonal);
+      await storage.updateWalletBalance(joinerEscrowWallet.id, newJoinerEscrow);
+      await storage.createTransaction(match.proposedByUserId, joinerEscrowWallet.id, "escrow", proposedAmount.toFixed(2), `Joined match: ${match.game}`);
+
+      const updatedMatch = await storage.acceptProposal(match.id, proposedAmount.toFixed(2), match.proposedByUserId);
+      res.json(updatedMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to accept proposal" });
+    }
+  });
+
+  // Creator rejects proposal
+  app.post("/api/matches/:id/reject-proposal", requireAuth, async (req, res) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.player1Id !== req.user!.id) {
+        return res.status(403).json({ message: "Only the creator can reject proposals" });
+      }
+
+      if (!match.proposedAmount || !match.proposedByUserId) {
+        return res.status(400).json({ message: "No pending proposal" });
+      }
+
+      const updatedMatch = await storage.rejectProposal(match.id);
+      res.json(updatedMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reject proposal" });
     }
   });
 

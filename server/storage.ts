@@ -169,6 +169,40 @@ export class DatabaseStorage implements IStorage {
     await db.update(matches).set({ spectatorCount: count }).where(eq(matches.id, matchId));
   }
 
+  async cancelMatch(matchId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      status: "cancelled",
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async proposeAmount(matchId: string, proposedAmount: string, proposedByUserId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      proposedAmount,
+      proposedByUserId,
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async acceptProposal(matchId: string, newAmount: string, player2Id: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      betAmount: newAmount,
+      player2Id,
+      status: "live",
+      proposedAmount: null,
+      proposedByUserId: null,
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async rejectProposal(matchId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      proposedAmount: null,
+      proposedByUserId: null,
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
   async getSpectatorBetsByMatch(matchId: string): Promise<SpectatorBet[]> {
     return db.select().from(spectatorBets).where(eq(spectatorBets.matchId, matchId));
   }

@@ -136,6 +136,66 @@ export default function Home() {
     },
   });
 
+  const cancelMatchMutation = useMutation({
+    mutationFn: async (matchId: string) => {
+      const res = await apiRequest("POST", `/api/matches/${matchId}/cancel`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      toast({ title: "Match Cancelled", description: "Your funds have been refunded" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to cancel match", variant: "destructive" });
+    },
+  });
+
+  const proposeMutation = useMutation({
+    mutationFn: async ({ matchId, proposedAmount }: { matchId: string; proposedAmount: number }) => {
+      const res = await apiRequest("POST", `/api/matches/${matchId}/propose`, { proposedAmount });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      toast({ title: "Proposal Sent", description: "Waiting for the creator to accept" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to send proposal", variant: "destructive" });
+    },
+  });
+
+  const acceptProposalMutation = useMutation({
+    mutationFn: async (matchId: string) => {
+      const res = await apiRequest("POST", `/api/matches/${matchId}/accept-proposal`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      toast({ title: "Proposal Accepted", description: "Match is now live!" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to accept proposal", variant: "destructive" });
+    },
+  });
+
+  const rejectProposalMutation = useMutation({
+    mutationFn: async (matchId: string) => {
+      const res = await apiRequest("POST", `/api/matches/${matchId}/reject-proposal`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      toast({ title: "Proposal Declined", description: "The proposal has been rejected" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reject proposal", variant: "destructive" });
+    },
+  });
+
   const handleDeposit = (amount: number) => {
     depositMutation.mutate({ type: depositType, amount });
     setDepositOpen(false);
@@ -300,6 +360,10 @@ export default function Home() {
                       key={match.id}
                       match={match}
                       onJoin={() => handleJoinMatch(match.id)}
+                      onCancel={() => cancelMatchMutation.mutate(match.id)}
+                      onPropose={(amount) => proposeMutation.mutate({ matchId: match.id, proposedAmount: amount })}
+                      onAcceptProposal={() => acceptProposalMutation.mutate(match.id)}
+                      onRejectProposal={() => rejectProposalMutation.mutate(match.id)}
                       currentUserId={user?.id}
                     />
                   ))}

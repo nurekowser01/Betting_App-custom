@@ -32,6 +32,8 @@ export const matches = pgTable("matches", {
   reportedWinnerId: varchar("reported_winner_id").references(() => users.id),
   winnerId: varchar("winner_id").references(() => users.id),
   spectatorCount: integer("spectator_count").notNull().default(0),
+  proposedAmount: decimal("proposed_amount", { precision: 10, scale: 2 }),
+  proposedByUserId: varchar("proposed_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

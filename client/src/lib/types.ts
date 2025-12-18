@@ -25,11 +25,14 @@ export interface Match {
   winnerId?: string | null;
   reportedWinnerId?: string | null;
   spectatorCount: number;
+  proposedAmount?: string | null;
+  proposedByUserId?: string | null;
   createdAt: string;
   player1?: { id: string; username: string } | null;
   player2?: { id: string; username: string } | null;
   winner?: { id: string; username: string } | null;
   reportedWinner?: { id: string; username: string } | null;
+  proposedBy?: { id: string; username: string } | null;
 }
 
 export interface SpectatorBet {
@@ -46,7 +49,7 @@ export interface Transaction {
   id: string;
   userId: string;
   walletId: string;
-  type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund';
+  type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee';
   amount: string;
   description: string;
   createdAt: string;

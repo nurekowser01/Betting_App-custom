@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Eye, Trophy, Gamepad2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Eye, Trophy, Gamepad2, X, Check, DollarSign } from "lucide-react";
 import type { Match } from "@/lib/types";
 
 interface MatchCardProps {
@@ -11,6 +13,10 @@ interface MatchCardProps {
   onSpectate?: () => void;
   onViewResults?: () => void;
   onComplete?: () => void;
+  onCancel?: () => void;
+  onPropose?: (amount: number) => void;
+  onAcceptProposal?: () => void;
+  onRejectProposal?: () => void;
   currentUserId?: string;
 }
 
@@ -22,10 +28,34 @@ const statusConfig = {
   pending_approval: { label: "Pending Approval", variant: "secondary" as const },
 };
 
-export function MatchCard({ match, onJoin, onSpectate, onViewResults, onComplete, currentUserId }: MatchCardProps) {
+export function MatchCard({ 
+  match, 
+  onJoin, 
+  onSpectate, 
+  onViewResults, 
+  onComplete, 
+  onCancel,
+  onPropose,
+  onAcceptProposal,
+  onRejectProposal,
+  currentUserId 
+}: MatchCardProps) {
+  const [showPropose, setShowPropose] = useState(false);
+  const [proposedAmount, setProposedAmount] = useState(match.betAmount);
+  
   const status = statusConfig[match.status];
   const betAmount = parseFloat(match.betAmount);
   const isParticipant = currentUserId && (match.player1Id === currentUserId || match.player2Id === currentUserId);
+  const isCreator = currentUserId === match.player1Id;
+  const hasProposal = match.proposedAmount && match.proposedByUserId;
+
+  const handlePropose = () => {
+    const amount = parseFloat(proposedAmount);
+    if (!isNaN(amount) && amount > 0) {
+      onPropose?.(amount);
+      setShowPropose(false);
+    }
+  };
 
   return (
     <Card className="overflow-visible" data-testid={`card-match-${match.id}`}>
@@ -99,11 +129,71 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults, onComplete
           </div>
         </div>
 
-        <div className="flex gap-2">
-          {match.status === 'waiting' && !match.player2 && !isParticipant && (
-            <Button className="flex-1" onClick={onJoin} data-testid="button-join-match">
-              Join Match
-            </Button>
+        {hasProposal && isCreator && (
+          <div className="mb-4 p-3 rounded-md bg-muted/50 border">
+            <p className="text-sm text-muted-foreground mb-2">
+              <span className="font-medium text-foreground">{match.proposedBy?.username}</span> proposed:
+            </p>
+            <p className="text-lg font-bold text-primary mb-3">
+              ${parseFloat(match.proposedAmount!).toFixed(2)} each
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1" onClick={onAcceptProposal} data-testid="button-accept-proposal">
+                <Check className="h-4 w-4 mr-1" />
+                Accept
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1" onClick={onRejectProposal} data-testid="button-reject-proposal">
+                <X className="h-4 w-4 mr-1" />
+                Decline
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {hasProposal && !isCreator && match.proposedByUserId === currentUserId && (
+          <div className="mb-4 p-3 rounded-md bg-muted/50 border">
+            <p className="text-sm text-muted-foreground">
+              Your proposal of <span className="font-medium text-foreground">${parseFloat(match.proposedAmount!).toFixed(2)}</span> is pending...
+            </p>
+          </div>
+        )}
+
+        {showPropose && (
+          <div className="mb-4 p-3 rounded-md bg-muted/50 border">
+            <p className="text-sm text-muted-foreground mb-2">Propose a different amount:</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="number"
+                  value={proposedAmount}
+                  onChange={(e) => setProposedAmount(e.target.value)}
+                  className="pl-8"
+                  min="1"
+                  step="1"
+                  data-testid="input-propose-amount"
+                />
+              </div>
+              <Button size="sm" onClick={handlePropose} data-testid="button-send-proposal">
+                Send
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowPropose(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          {match.status === 'waiting' && !match.player2 && !isParticipant && !hasProposal && (
+            <>
+              <Button className="flex-1" onClick={onJoin} data-testid="button-join-match">
+                Join Match
+              </Button>
+              <Button variant="outline" onClick={() => setShowPropose(!showPropose)} data-testid="button-propose-amount">
+                <DollarSign className="h-4 w-4" />
+              </Button>
+            </>
           )}
           {match.status === 'live' && !isParticipant && (
             <Button className="flex-1" variant="outline" onClick={onSpectate} data-testid="button-spectate">
@@ -122,7 +212,18 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults, onComplete
               View Results
             </Button>
           )}
-          {match.status === 'waiting' && isParticipant && (
+          {match.status === 'waiting' && isCreator && !match.player2 && !hasProposal && (
+            <>
+              <Badge variant="secondary" className="flex-1 justify-center py-2">
+                Your Match - Waiting
+              </Badge>
+              <Button variant="destructive" size="sm" onClick={onCancel} data-testid="button-cancel-match">
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </Button>
+            </>
+          )}
+          {match.status === 'waiting' && isParticipant && !isCreator && (
             <Badge variant="secondary" className="flex-1 justify-center py-2">
               Your Match - Waiting for opponent
             </Badge>
