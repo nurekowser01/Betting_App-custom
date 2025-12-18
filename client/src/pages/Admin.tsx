@@ -9,13 +9,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign } from "lucide-react";
+import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Link } from "wouter";
 
 interface AdminUser {
   id: string;
   username: string;
   isAdmin: number;
+}
+
+interface Integration {
+  id: string;
+  type: 'binance_pay' | 'stripe' | 'coinbase';
+  enabled: number;
+  apiKey: string | null;
+  secretKey: string | null;
+  webhookSecret: string | null;
+  additionalConfig: any;
+  lastTestedAt: string | null;
+  testStatus: string | null;
+  updatedAt: string;
 }
 
 interface SpectatorBetSummary {
@@ -124,6 +140,87 @@ export default function Admin() {
     },
   });
 
+  // Integration management
+  const { data: allIntegrations = [], isLoading: integrationsLoading } = useQuery<Integration[]>({
+    queryKey: ["/api/admin/integrations"],
+    enabled: isSuperAdmin,
+  });
+
+  const [integrationForms, setIntegrationForms] = useState<Record<string, { apiKey: string; secretKey: string; webhookSecret: string }>>({
+    binance_pay: { apiKey: '', secretKey: '', webhookSecret: '' },
+    stripe: { apiKey: '', secretKey: '', webhookSecret: '' },
+    coinbase: { apiKey: '', secretKey: '', webhookSecret: '' },
+  });
+  const [testingIntegration, setTestingIntegration] = useState<string | null>(null);
+
+  const updateIntegrationMutation = useMutation({
+    mutationFn: async ({ type, data }: { type: string; data: any }) => {
+      const res = await apiRequest("POST", `/api/admin/integrations/${type}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/integrations"] });
+      toast({ title: "Saved", description: "Integration settings updated." });
+      // Clear the form
+      setIntegrationForms({
+        binance_pay: { apiKey: '', secretKey: '', webhookSecret: '' },
+        stripe: { apiKey: '', secretKey: '', webhookSecret: '' },
+        coinbase: { apiKey: '', secretKey: '', webhookSecret: '' },
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update integration", variant: "destructive" });
+    },
+  });
+
+  const testIntegrationMutation = useMutation({
+    mutationFn: async (type: string) => {
+      setTestingIntegration(type);
+      const res = await apiRequest("POST", `/api/admin/integrations/${type}/test`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setTestingIntegration(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/integrations"] });
+      if (data.success) {
+        toast({ title: "Success", description: data.message });
+      } else {
+        toast({ title: "Test Failed", description: data.message, variant: "destructive" });
+      }
+    },
+    onError: () => {
+      setTestingIntegration(null);
+      toast({ title: "Error", description: "Failed to test connection", variant: "destructive" });
+    },
+  });
+
+  const handleToggleIntegration = (type: string, currentEnabled: number) => {
+    updateIntegrationMutation.mutate({ type, data: { enabled: currentEnabled === 1 ? 0 : 1 } });
+  };
+
+  const handleSaveIntegration = (type: string) => {
+    const form = integrationForms[type];
+    const data: any = {};
+    if (form.apiKey) data.apiKey = form.apiKey;
+    if (form.secretKey) data.secretKey = form.secretKey;
+    if (form.webhookSecret) data.webhookSecret = form.webhookSecret;
+    
+    if (Object.keys(data).length === 0) {
+      toast({ title: "No changes", description: "Enter at least one value to save", variant: "destructive" });
+      return;
+    }
+    
+    updateIntegrationMutation.mutate({ type, data });
+  };
+
+  const getIntegrationByType = (type: string) => allIntegrations.find(i => i.type === type);
+
+  const integrationLabels: Record<string, { name: string; description: string }> = {
+    binance_pay: { name: "Binance Pay", description: "Accept cryptocurrency payments via Binance" },
+    stripe: { name: "Stripe", description: "Accept card and bank payments in EUR and other currencies" },
+    coinbase: { name: "Coinbase Commerce", description: "Accept cryptocurrency payments via Coinbase" },
+  };
+
   const selectWinner = (matchId: string, winnerId: string) => {
     setSelectedWinners((prev) => ({ ...prev, [matchId]: winnerId }));
   };
@@ -190,6 +287,12 @@ export default function Admin() {
               <TabsTrigger value="users" className="gap-2" data-testid="tab-users">
                 <Users className="h-4 w-4" />
                 Users ({allUsers.length})
+              </TabsTrigger>
+            )}
+            {isSuperAdmin && (
+              <TabsTrigger value="integrations" className="gap-2" data-testid="tab-integrations">
+                <Settings className="h-4 w-4" />
+                Integrations
               </TabsTrigger>
             )}
           </TabsList>
@@ -471,6 +574,188 @@ export default function Admin() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {isSuperAdmin && (
+            <TabsContent value="integrations">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Payment Integrations
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {integrationsLoading ? (
+                    <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                  ) : (
+                    <div className="space-y-6">
+                      {['binance_pay', 'stripe', 'coinbase'].map((type) => {
+                        const integration = getIntegrationByType(type);
+                        const label = integrationLabels[type];
+                        const form = integrationForms[type];
+                        const isEnabled = integration?.enabled === 1;
+                        const hasCredentials = integration?.apiKey && integration?.secretKey;
+                        const isTesting = testingIntegration === type;
+                        
+                        return (
+                          <div
+                            key={type}
+                            data-testid={`integration-${type}`}
+                            className="p-4 border rounded-md bg-muted/30 space-y-4"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex flex-col">
+                                  <div className="font-medium flex items-center gap-2">
+                                    {label.name}
+                                    {isEnabled && (
+                                      <Badge variant="default" className="text-xs">Enabled</Badge>
+                                    )}
+                                    {!isEnabled && hasCredentials && (
+                                      <Badge variant="secondary" className="text-xs">Disabled</Badge>
+                                    )}
+                                    {!hasCredentials && (
+                                      <Badge variant="outline" className="text-xs">Not Configured</Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">{label.description}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {hasCredentials && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => testIntegrationMutation.mutate(type)}
+                                    disabled={isTesting || testIntegrationMutation.isPending}
+                                    data-testid={`button-test-${type}`}
+                                  >
+                                    {isTesting ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Testing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Zap className="h-4 w-4 mr-2" />
+                                        Test Connection
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`toggle-${type}`} className="text-sm">
+                                    {isEnabled ? 'On' : 'Off'}
+                                  </Label>
+                                  <Switch
+                                    id={`toggle-${type}`}
+                                    checked={isEnabled}
+                                    onCheckedChange={() => handleToggleIntegration(type, integration?.enabled ?? 0)}
+                                    disabled={!hasCredentials || updateIntegrationMutation.isPending}
+                                    data-testid={`switch-${type}`}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {integration?.testStatus && (
+                              <div className={`flex items-center gap-2 text-sm ${
+                                integration.testStatus === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                              }`}>
+                                {integration.testStatus === 'success' ? (
+                                  <CheckCircle className="h-4 w-4" />
+                                ) : (
+                                  <XCircle className="h-4 w-4" />
+                                )}
+                                Last test: {integration.testStatus}
+                                {integration.lastTestedAt && (
+                                  <span className="text-muted-foreground">
+                                    ({new Date(integration.lastTestedAt).toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <div className="space-y-2">
+                                <Label htmlFor={`api-key-${type}`}>API Key</Label>
+                                <Input
+                                  id={`api-key-${type}`}
+                                  type="password"
+                                  placeholder={integration?.apiKey || "Enter API Key"}
+                                  value={form.apiKey}
+                                  onChange={(e) => setIntegrationForms(prev => ({
+                                    ...prev,
+                                    [type]: { ...prev[type], apiKey: e.target.value }
+                                  }))}
+                                  data-testid={`input-api-key-${type}`}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`secret-key-${type}`}>Secret Key</Label>
+                                <Input
+                                  id={`secret-key-${type}`}
+                                  type="password"
+                                  placeholder={integration?.secretKey || "Enter Secret Key"}
+                                  value={form.secretKey}
+                                  onChange={(e) => setIntegrationForms(prev => ({
+                                    ...prev,
+                                    [type]: { ...prev[type], secretKey: e.target.value }
+                                  }))}
+                                  data-testid={`input-secret-key-${type}`}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`webhook-${type}`}>Webhook Secret (optional)</Label>
+                                <Input
+                                  id={`webhook-${type}`}
+                                  type="password"
+                                  placeholder={integration?.webhookSecret || "Enter Webhook Secret"}
+                                  value={form.webhookSecret}
+                                  onChange={(e) => setIntegrationForms(prev => ({
+                                    ...prev,
+                                    [type]: { ...prev[type], webhookSecret: e.target.value }
+                                  }))}
+                                  data-testid={`input-webhook-${type}`}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                              <Button
+                                onClick={() => handleSaveIntegration(type)}
+                                disabled={updateIntegrationMutation.isPending || (!form.apiKey && !form.secretKey && !form.webhookSecret)}
+                                data-testid={`button-save-${type}`}
+                              >
+                                {updateIntegrationMutation.isPending ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Saving...
+                                  </>
+                                ) : (
+                                  'Save Credentials'
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <div className="p-4 border rounded-md bg-accent/20">
+                        <h4 className="font-medium mb-2">How it works</h4>
+                        <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                          <li>Enter your API credentials for each payment provider</li>
+                          <li>Use "Test Connection" to verify your credentials work</li>
+                          <li>Toggle the switch to enable/disable each payment method</li>
+                          <li>Only enabled payment methods will appear in the deposit dialog for users</li>
+                        </ul>
+                      </div>
                     </div>
                   )}
                 </CardContent>
