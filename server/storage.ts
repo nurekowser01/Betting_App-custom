@@ -11,6 +11,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  updateUserAdminLevel(userId: string, level: number): Promise<User | undefined>;
   
   getWalletsByUserId(userId: string): Promise<Wallet[]>;
   getWallet(id: string): Promise<Wallet | undefined>;
@@ -23,6 +25,7 @@ export interface IStorage {
   getMatch(id: string): Promise<Match | undefined>;
   getMatchesByUserId(userId: string): Promise<Match[]>;
   getPendingApprovalMatches(): Promise<Match[]>;
+  getLiveMatches(): Promise<Match[]>;
   createMatch(game: string, betAmount: string, player1Id: string): Promise<Match>;
   joinMatch(matchId: string, player2Id: string): Promise<Match | undefined>;
   reportMatchWinner(matchId: string, reportedWinnerId: string): Promise<Match | undefined>;
@@ -52,6 +55,15 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users);
+  }
+
+  async updateUserAdminLevel(userId: string, level: number): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ isAdmin: level }).where(eq(users.id, userId)).returning();
     return user;
   }
 
@@ -132,6 +144,10 @@ export class DatabaseStorage implements IStorage {
 
   async getPendingApprovalMatches(): Promise<Match[]> {
     return db.select().from(matches).where(eq(matches.status, "pending_approval")).orderBy(desc(matches.createdAt));
+  }
+
+  async getLiveMatches(): Promise<Match[]> {
+    return db.select().from(matches).where(eq(matches.status, "live")).orderBy(desc(matches.createdAt));
   }
 
   async reportMatchWinner(matchId: string, reportedWinnerId: string): Promise<Match | undefined> {
