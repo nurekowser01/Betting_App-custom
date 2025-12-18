@@ -24,7 +24,7 @@ export function HeroSection({ onCreateMatch, onBrowseFixtures, totalBets = 12847
             <span className="text-primary">Playmate</span>
           </h1>
           <p className="text-xl text-gray-300 mb-8 leading-relaxed">
-            Challenge players to PlayStation matches, stake your claim, and win big. 
+            Challenge players to Video Games, stake your claim, and win big. 
             Secure escrow protection ensures fair play.
           </p>
 
