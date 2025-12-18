@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2, Ban, Trash2, UserCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -19,6 +19,7 @@ interface AdminUser {
   id: string;
   username: string;
   isAdmin: number;
+  suspended: number;
 }
 
 interface Integration {
@@ -137,6 +138,37 @@ export default function Admin() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to update user", variant: "destructive" });
+    },
+  });
+
+  const suspendUserMutation = useMutation({
+    mutationFn: async ({ userId, suspended }: { userId: string; suspended: number }) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/suspend`, { suspended });
+      return res.json();
+    },
+    onSuccess: (_, { suspended }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ 
+        title: suspended === 1 ? "User Suspended" : "User Unsuspended", 
+        description: suspended === 1 ? "User has been suspended and cannot login." : "User account has been restored."
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update user", variant: "destructive" });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User Deleted", description: "User has been permanently deleted." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete user", variant: "destructive" });
     },
   });
 
@@ -551,25 +583,58 @@ export default function Admin() {
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
+                            {u.suspended === 1 && (
+                              <Badge variant="destructive">Suspended</Badge>
+                            )}
                             {u.id === user.id ? (
                               <Badge variant={adminLevelColors[u.isAdmin]}>
                                 {adminLevelLabels[u.isAdmin]} (You)
                               </Badge>
                             ) : (
-                              <Select
-                                value={u.isAdmin.toString()}
-                                onValueChange={(value) => updateAdminMutation.mutate({ userId: u.id, level: parseInt(value) })}
-                                disabled={updateAdminMutation.isPending}
-                              >
-                                <SelectTrigger className="w-36" data-testid={`select-admin-level-${u.id}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="0">User</SelectItem>
-                                  <SelectItem value="1">Admin</SelectItem>
-                                  <SelectItem value="2">Super Admin</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <>
+                                <Select
+                                  value={u.isAdmin.toString()}
+                                  onValueChange={(value) => updateAdminMutation.mutate({ userId: u.id, level: parseInt(value) })}
+                                  disabled={updateAdminMutation.isPending}
+                                >
+                                  <SelectTrigger className="w-36" data-testid={`select-admin-level-${u.id}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">User</SelectItem>
+                                    <SelectItem value="1">Admin</SelectItem>
+                                    <SelectItem value="2">Super Admin</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {u.isAdmin === 0 && (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant={u.suspended === 1 ? "outline" : "secondary"}
+                                      onClick={() => suspendUserMutation.mutate({ userId: u.id, suspended: u.suspended === 1 ? 0 : 1 })}
+                                      disabled={suspendUserMutation.isPending}
+                                      data-testid={`button-suspend-${u.id}`}
+                                      title={u.suspended === 1 ? "Unsuspend User" : "Suspend User"}
+                                    >
+                                      {u.suspended === 1 ? <UserCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="destructive"
+                                      onClick={() => {
+                                        if (confirm(`Are you sure you want to permanently delete user "${u.username}"? This cannot be undone.`)) {
+                                          deleteUserMutation.mutate(u.id);
+                                        }
+                                      }}
+                                      disabled={deleteUserMutation.isPending}
+                                      data-testid={`button-delete-${u.id}`}
+                                      title="Delete User"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>

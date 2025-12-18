@@ -29,6 +29,7 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   gamerUsername: text("gamer_username"),
   isAdmin: integer("is_admin").notNull().default(0),
+  suspended: integer("suspended").notNull().default(0),
 });
 
 export const wallets = pgTable("wallets", {

@@ -16,6 +16,8 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   updateUserAdminLevel(userId: string, level: number): Promise<User | undefined>;
   updateGamerUsername(userId: string, gamerUsername: string): Promise<User | undefined>;
+  suspendUser(userId: string, suspended: number): Promise<User | undefined>;
+  deleteUser(userId: string): Promise<boolean>;
   
   getWalletsByUserId(userId: string): Promise<Wallet[]>;
   getWallet(id: string): Promise<Wallet | undefined>;
@@ -123,6 +125,16 @@ export class DatabaseStorage implements IStorage {
   async updateGamerUsername(userId: string, gamerUsername: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ gamerUsername }).where(eq(users.id, userId)).returning();
     return user;
+  }
+
+  async suspendUser(userId: string, suspended: number): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ suspended }).where(eq(users.id, userId)).returning();
+    return user;
+  }
+
+  async deleteUser(userId: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, userId));
+    return true;
   }
 
   async getWalletsByUserId(userId: string): Promise<Wallet[]> {

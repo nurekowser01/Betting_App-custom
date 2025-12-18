@@ -39,6 +39,7 @@ export function setupAuth(app: Express) {
     session({
       store: new PgSession({
         pool,
+        tableName: 'sessions',
         createTableIfMissing: false,
       }),
       secret: process.env.SESSION_SECRET || "gamestake-secret-key",
@@ -69,6 +70,9 @@ export function setupAuth(app: Express) {
         const isValid = await comparePassword(password, user.password);
         if (!isValid) {
           return done(null, false, { message: "Incorrect password" });
+        }
+        if (user.suspended === 1) {
+          return done(null, false, { message: "Your account has been suspended" });
         }
         return done(null, { id: user.id, username: user.username, gamerUsername: user.gamerUsername, isAdmin: user.isAdmin });
       } catch (err) {

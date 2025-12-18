@@ -855,6 +855,80 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Suspend/unsuspend user (super admin only)
+  app.post("/api/admin/users/:id/suspend", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const schema = z.object({
+        suspended: z.number().int().min(0).max(1),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input" });
+      }
+
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Cannot suspend yourself
+      if (targetUser.id === user.id) {
+        return res.status(400).json({ message: "Cannot suspend yourself" });
+      }
+
+      // Cannot suspend other admins
+      if (targetUser.isAdmin >= 1) {
+        return res.status(400).json({ message: "Cannot suspend admin users" });
+      }
+
+      const updatedUser = await storage.suspendUser(req.params.id, parsed.data.suspended);
+      if (updatedUser) {
+        const { password, ...userWithoutPassword } = updatedUser;
+        res.json(userWithoutPassword);
+      } else {
+        res.status(500).json({ message: "Failed to update user" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to suspend user" });
+    }
+  });
+
+  // Admin: Delete user (super admin only)
+  app.delete("/api/admin/users/:id", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Cannot delete yourself
+      if (targetUser.id === user.id) {
+        return res.status(400).json({ message: "Cannot delete yourself" });
+      }
+
+      // Cannot delete other admins
+      if (targetUser.isAdmin >= 1) {
+        return res.status(400).json({ message: "Cannot delete admin users" });
+      }
+
+      await storage.deleteUser(req.params.id);
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
   // Admin: Get all integrations
   app.get("/api/admin/integrations", requireAuth, async (req, res) => {
     try {
