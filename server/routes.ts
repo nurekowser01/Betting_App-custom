@@ -800,6 +800,87 @@ export async function registerRoutes(
     }
   });
 
+  // Public: Get user profile with stats
+  app.get("/api/users/:id/profile", async (req, res) => {
+    try {
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get user's matches
+      const userMatches = await storage.getMatchesByUserId(req.params.id);
+      
+      // Calculate stats
+      const completedMatches = userMatches.filter(m => m.status === 'completed');
+      const wins = completedMatches.filter(m => m.winnerId === req.params.id).length;
+      const losses = completedMatches.filter(m => m.winnerId && m.winnerId !== req.params.id).length;
+      const totalMatches = completedMatches.length;
+      
+      // Calculate total earnings from wins
+      let totalEarnings = 0;
+      for (const match of completedMatches) {
+        if (match.winnerId === req.params.id) {
+          // Winner gets 90% of the pot (2x bet amount minus 10% platform fee)
+          const pot = parseFloat(match.betAmount) * 2;
+          const winnerShare = pot * 0.9;
+          totalEarnings += winnerShare;
+        }
+      }
+
+      // Get spectator betting stats
+      const spectatorBets = await storage.getSpectatorBetsByUser(req.params.id);
+      const wonBets = spectatorBets.filter(b => b.status === 'won').length;
+      const lostBets = spectatorBets.filter(b => b.status === 'lost').length;
+      const pendingBets = spectatorBets.filter(b => b.status === 'pending').length;
+
+      // Get match history with player details
+      const matchHistory = await Promise.all(userMatches.slice(0, 20).map(async (match) => {
+        const player1 = await storage.getUser(match.player1Id);
+        const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
+        const winner = match.winnerId ? await storage.getUser(match.winnerId) : null;
+        
+        return {
+          id: match.id,
+          game: match.game,
+          betAmount: match.betAmount,
+          status: match.status,
+          createdAt: match.createdAt,
+          player1: player1 ? { id: player1.id, username: player1.username, gamerUsername: player1.gamerUsername } : null,
+          player2: player2 ? { id: player2.id, username: player2.username, gamerUsername: player2.gamerUsername } : null,
+          winner: winner ? { id: winner.id, username: winner.username } : null,
+          isWin: match.winnerId === req.params.id,
+        };
+      }));
+
+      res.json({
+        user: {
+          id: targetUser.id,
+          username: targetUser.username,
+          gamerUsername: targetUser.gamerUsername,
+          profileImageUrl: targetUser.profileImageUrl,
+        },
+        stats: {
+          wins,
+          losses,
+          totalMatches,
+          winRate: totalMatches > 0 ? ((wins / totalMatches) * 100).toFixed(1) : "0.0",
+          totalEarnings: totalEarnings.toFixed(2),
+        },
+        spectatorStats: {
+          wonBets,
+          lostBets,
+          pendingBets,
+          totalBets: spectatorBets.length,
+        },
+        matchHistory,
+      });
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Failed to fetch user profile" });
+    }
+  });
+
   // Admin: Get all users (super admin only)
   app.get("/api/admin/users", requireAuth, async (req, res) => {
     try {
