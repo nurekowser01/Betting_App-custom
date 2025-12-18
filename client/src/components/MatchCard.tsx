@@ -19,6 +19,7 @@ const statusConfig = {
   live: { label: "Live", variant: "destructive" as const },
   completed: { label: "Completed", variant: "outline" as const },
   cancelled: { label: "Cancelled", variant: "outline" as const },
+  pending_approval: { label: "Pending Approval", variant: "secondary" as const },
 };
 
 export function MatchCard({ match, onJoin, onSpectate, onViewResults, onComplete, currentUserId }: MatchCardProps) {
@@ -124,6 +125,16 @@ export function MatchCard({ match, onJoin, onSpectate, onViewResults, onComplete
           {match.status === 'waiting' && isParticipant && (
             <Badge variant="secondary" className="flex-1 justify-center py-2">
               Your Match - Waiting for opponent
+            </Badge>
+          )}
+          {match.status === 'pending_approval' && isParticipant && (
+            <Badge variant="secondary" className="flex-1 justify-center py-2">
+              Awaiting Admin Approval
+            </Badge>
+          )}
+          {match.status === 'pending_approval' && !isParticipant && (
+            <Badge variant="outline" className="flex-1 justify-center py-2">
+              Pending Verification
             </Badge>
           )}
         </div>

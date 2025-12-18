@@ -11,14 +11,16 @@ interface MatchForList {
   id: string;
   game: string;
   betAmount: string;
-  status: 'waiting' | 'live' | 'completed' | 'cancelled';
+  status: 'waiting' | 'live' | 'completed' | 'cancelled' | 'pending_approval';
   player1Id: string;
   player2Id?: string | null;
   winnerId?: string | null;
+  reportedWinnerId?: string | null;
   spectatorCount: number;
   createdAt: string;
   player1?: Player | null;
   player2?: Player | null;
+  reportedWinner?: Player | null;
 }
 
 interface LiveMatchesListProps {

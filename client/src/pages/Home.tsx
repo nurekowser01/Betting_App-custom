@@ -112,7 +112,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       setCompleteMatchOpen(false);
-      toast({ title: "Match Completed", description: "Winner has been declared!" });
+      toast({ title: "Winner Reported", description: "Waiting for admin approval to transfer funds." });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to complete match", variant: "destructive" });
@@ -197,7 +197,8 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar 
         username={user?.username} 
-        balance={totalBalance} 
+        balance={totalBalance}
+        isAdmin={user?.isAdmin === 1}
         onLogout={logout}
         onLogin={() => setAuthOpen(true)}
       />

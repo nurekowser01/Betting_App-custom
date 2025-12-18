@@ -3,22 +3,24 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Gamepad2, Menu, User, LogOut, History, Wallet, LogIn } from "lucide-react";
+import { Gamepad2, Menu, User, LogOut, History, Wallet, LogIn, Shield } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link } from "wouter";
 
 interface NavbarProps {
   username?: string | null;
   balance?: number;
+  isAdmin?: boolean;
   onLogout?: () => void;
   onLogin?: () => void;
 }
 
-export function Navbar({ username, balance = 0, onLogout, onLogin }: NavbarProps) {
+export function Navbar({ username, balance = 0, isAdmin = false, onLogout, onLogin }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navLinks = [
     { label: "Matches", href: "/" },
+    ...(isAdmin ? [{ label: "Admin", href: "/admin" }] : []),
   ];
 
   return (
@@ -79,6 +81,17 @@ export function Navbar({ username, balance = 0, onLogout, onLogin }: NavbarProps
                     <History className="h-4 w-4 mr-2" />
                     Transaction History
                   </DropdownMenuItem>
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <Link href="/admin">
+                        <DropdownMenuItem data-testid="menu-item-admin">
+                          <Shield className="h-4 w-4 mr-2" />
+                          Admin Panel
+                        </DropdownMenuItem>
+                      </Link>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onLogout} data-testid="menu-item-logout">
                     <LogOut className="h-4 w-4 mr-2" />

@@ -3,6 +3,7 @@ export type WalletType = 'personal' | 'escrow' | 'spectator';
 export interface User {
   id: string;
   username: string;
+  isAdmin?: number;
 }
 
 export interface Wallet {
@@ -12,7 +13,7 @@ export interface Wallet {
   balance: string;
 }
 
-export type MatchStatus = 'waiting' | 'live' | 'completed' | 'cancelled';
+export type MatchStatus = 'waiting' | 'live' | 'completed' | 'cancelled' | 'pending_approval';
 
 export interface Match {
   id: string;
@@ -22,11 +23,13 @@ export interface Match {
   player1Id: string;
   player2Id?: string | null;
   winnerId?: string | null;
+  reportedWinnerId?: string | null;
   spectatorCount: number;
   createdAt: string;
   player1?: { id: string; username: string } | null;
   player2?: { id: string; username: string } | null;
   winner?: { id: string; username: string } | null;
+  reportedWinner?: { id: string; username: string } | null;
 }
 
 export interface SpectatorBet {
