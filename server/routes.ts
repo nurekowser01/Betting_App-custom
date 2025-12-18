@@ -1345,6 +1345,105 @@ export async function registerRoutes(
     }
   });
 
+  // Quick Links - Public
+  app.get("/api/public/quick-links", async (req, res) => {
+    try {
+      const links = await storage.getVisibleQuickLinks();
+      res.json(links);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch quick links" });
+    }
+  });
+
+  // Quick Links - Admin
+  app.get("/api/admin/quick-links", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const links = await storage.getAllQuickLinks();
+      res.json(links);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch quick links" });
+    }
+  });
+
+  app.post("/api/admin/quick-links", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { title, url, icon, isVisible } = req.body;
+      if (!title || !url) {
+        return res.status(400).json({ message: "Title and URL are required" });
+      }
+
+      const link = await storage.createQuickLink({
+        title,
+        url,
+        icon: icon || "link",
+        displayOrder: 0,
+        isVisible: isVisible !== undefined ? isVisible : 1,
+      });
+      res.json(link);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create quick link" });
+    }
+  });
+
+  app.patch("/api/admin/quick-links/:id", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const link = await storage.updateQuickLink(req.params.id, req.body);
+      if (!link) {
+        return res.status(404).json({ message: "Quick link not found" });
+      }
+      res.json(link);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update quick link" });
+    }
+  });
+
+  app.patch("/api/admin/quick-links/reorder", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { orderedIds } = req.body;
+      if (!orderedIds || !Array.isArray(orderedIds)) {
+        return res.status(400).json({ message: "orderedIds array is required" });
+      }
+
+      await storage.reorderQuickLinks(orderedIds);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reorder quick links" });
+    }
+  });
+
+  app.delete("/api/admin/quick-links/:id", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      await storage.deleteQuickLink(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete quick link" });
+    }
+  });
+
   // Crypto deposit routes using Binance Pay
   const crypto = await import('crypto');
   
