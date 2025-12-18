@@ -3,7 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CreditCard, Wallet } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CreditCard, Wallet, Bitcoin, ExternalLink, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface DepositDialogProps {
   open: boolean;
@@ -14,13 +18,52 @@ interface DepositDialogProps {
 
 export function DepositDialog({ open, onOpenChange, onDeposit, walletType = 'personal' }: DepositDialogProps) {
   const [amount, setAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"fiat" | "crypto">("fiat");
+  const { toast } = useToast();
+
+  const cryptoMutation = useMutation({
+    mutationFn: async (usdAmount: number) => {
+      const res = await apiRequest("POST", "/api/crypto/create-charge", { amount: usdAmount });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.hostedUrl) {
+        window.open(data.hostedUrl, "_blank");
+        toast({
+          title: "Crypto Payment Created",
+          description: "Complete the payment in the new window. Your balance will update once confirmed.",
+        });
+        onOpenChange(false);
+        setAmount("");
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create crypto payment. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleDeposit = () => {
     const numAmount = parseFloat(amount);
     if (numAmount > 0) {
-      onDeposit?.(numAmount);
-      onOpenChange(false);
-      setAmount("");
+      if (paymentMethod === "crypto") {
+        if (numAmount < 5) {
+          toast({
+            title: "Minimum Amount",
+            description: "Crypto deposits require a minimum of $5",
+            variant: "destructive",
+          });
+          return;
+        }
+        cryptoMutation.mutate(numAmount);
+      } else {
+        onDeposit?.(numAmount);
+        onOpenChange(false);
+        setAmount("");
+      }
     }
   };
 
@@ -66,23 +109,61 @@ export function DepositDialog({ open, onOpenChange, onDeposit, walletType = 'per
             ))}
           </div>
 
-          <div className="p-4 rounded-md bg-muted space-y-3">
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Payment Method</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Secure payment processing. Funds available instantly.
-            </p>
-          </div>
+          <Tabs value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as "fiat" | "crypto")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="fiat" className="flex items-center gap-2" data-testid="tab-fiat">
+                <CreditCard className="h-4 w-4" />
+                Card
+              </TabsTrigger>
+              <TabsTrigger value="crypto" className="flex items-center gap-2" data-testid="tab-crypto">
+                <Bitcoin className="h-4 w-4" />
+                Crypto
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="fiat" className="mt-4">
+              <div className="p-4 rounded-md bg-muted space-y-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Card Payment</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Secure payment processing. Funds available instantly.
+                </p>
+              </div>
+            </TabsContent>
+            <TabsContent value="crypto" className="mt-4">
+              <div className="p-4 rounded-md bg-muted space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bitcoin className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Cryptocurrency</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Pay with Bitcoin, Ethereum, USDC, or other cryptocurrencies. Converted to USD credits automatically.
+                </p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <ExternalLink className="h-3 w-3" />
+                  Opens Coinbase Commerce checkout
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
 
           <Button 
             className="w-full" 
             onClick={handleDeposit}
-            disabled={!amount || parseFloat(amount) <= 0}
+            disabled={!amount || parseFloat(amount) <= 0 || cryptoMutation.isPending}
             data-testid="button-confirm-deposit"
           >
-            Deposit ${amount || '0.00'}
+            {cryptoMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating Payment...
+              </>
+            ) : (
+              <>
+                {paymentMethod === "crypto" ? "Pay with Crypto" : "Deposit"} ${amount || '0.00'}
+              </>
+            )}
           </Button>
         </div>
       </DialogContent>

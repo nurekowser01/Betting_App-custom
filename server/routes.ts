@@ -815,5 +815,159 @@ export async function registerRoutes(
     }
   });
 
+  // Crypto deposit routes using Coinbase Commerce
+  app.post("/api/crypto/create-charge", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        amount: z.number().positive().min(5).max(10000),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Amount must be between $5 and $10,000" });
+      }
+
+      const apiKey = process.env.COINBASE_COMMERCE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ message: "Crypto payments not configured" });
+      }
+
+      const response = await fetch("https://api.commerce.coinbase.com/charges", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CC-Api-Key": apiKey,
+          "X-CC-Version": "2018-03-22",
+        },
+        body: JSON.stringify({
+          name: "GameStake Wallet Deposit",
+          description: `Deposit $${parsed.data.amount} to your GameStake wallet`,
+          pricing_type: "fixed_price",
+          local_price: {
+            amount: parsed.data.amount.toString(),
+            currency: "USD",
+          },
+          metadata: {
+            user_id: req.user!.id,
+          },
+          redirect_url: `${req.protocol}://${req.get('host')}/profile?deposit=success`,
+          cancel_url: `${req.protocol}://${req.get('host')}/profile?deposit=cancelled`,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Coinbase Commerce error:", errorData);
+        return res.status(500).json({ message: "Failed to create crypto payment" });
+      }
+
+      const data = await response.json();
+      const charge = data.data;
+
+      // Store the pending payment
+      await storage.createCryptoPayment(
+        req.user!.id,
+        charge.id,
+        charge.code,
+        charge.hosted_url,
+        parsed.data.amount.toString()
+      );
+
+      res.json({
+        chargeId: charge.id,
+        hostedUrl: charge.hosted_url,
+        code: charge.code,
+      });
+    } catch (error) {
+      console.error("Crypto charge creation error:", error);
+      res.status(500).json({ message: "Failed to create crypto payment" });
+    }
+  });
+
+  // Coinbase Commerce webhook handler
+  app.post("/api/crypto/webhook", async (req, res) => {
+    try {
+      const event = req.body;
+      
+      if (!event || !event.event || !event.event.type) {
+        return res.status(400).json({ message: "Invalid webhook payload" });
+      }
+
+      const eventType = event.event.type;
+      const chargeData = event.event.data;
+
+      console.log(`Received Coinbase webhook: ${eventType}`, chargeData?.id);
+
+      if (eventType === "charge:confirmed" || eventType === "charge:resolved") {
+        const chargeId = chargeData?.id;
+        if (!chargeId) {
+          return res.status(400).json({ message: "Missing charge ID" });
+        }
+
+        const cryptoPayment = await storage.getCryptoPaymentByChargeId(chargeId);
+        if (!cryptoPayment) {
+          console.error("Crypto payment not found:", chargeId);
+          return res.status(404).json({ message: "Payment not found" });
+        }
+
+        if (cryptoPayment.status === "completed") {
+          return res.json({ message: "Already processed" });
+        }
+
+        // Get payment details
+        const payments = chargeData?.payments || [];
+        const confirmedPayment = payments.find((p: any) => p.status === "CONFIRMED");
+        const cryptoCurrency = confirmedPayment?.value?.crypto?.currency || "CRYPTO";
+        const cryptoAmount = confirmedPayment?.value?.crypto?.amount || "0";
+
+        // Update payment status
+        await storage.updateCryptoPaymentStatus(
+          chargeId,
+          "completed",
+          cryptoCurrency,
+          cryptoAmount
+        );
+
+        // Credit user's personal wallet
+        const wallet = await storage.getWalletByUserAndType(cryptoPayment.userId, "personal");
+        if (wallet) {
+          const newBalance = (parseFloat(wallet.balance) + parseFloat(cryptoPayment.usdAmount)).toFixed(2);
+          await storage.updateWalletBalance(wallet.id, newBalance);
+
+          // Record transaction
+          await storage.createTransaction(
+            cryptoPayment.userId,
+            wallet.id,
+            "crypto_deposit",
+            cryptoPayment.usdAmount,
+            `Crypto deposit (${cryptoAmount} ${cryptoCurrency} → $${cryptoPayment.usdAmount})`
+          );
+        }
+
+        console.log(`Crypto payment completed: ${chargeId}, credited $${cryptoPayment.usdAmount} to user ${cryptoPayment.userId}`);
+      } else if (eventType === "charge:failed" || eventType === "charge:expired") {
+        const chargeId = chargeData?.id;
+        if (chargeId) {
+          await storage.updateCryptoPaymentStatus(chargeId, eventType === "charge:expired" ? "expired" : "cancelled");
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Webhook processing error:", error);
+      res.status(500).json({ message: "Webhook processing failed" });
+    }
+  });
+
+  // Get user's crypto payment history
+  app.get("/api/crypto/payments", requireAuth, async (req, res) => {
+    try {
+      const payments = await storage.getCryptoPaymentsByUserId(req.user!.id);
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto payments" });
+    }
+  });
+
   return httpServer;
 }
