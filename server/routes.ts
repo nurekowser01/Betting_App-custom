@@ -669,6 +669,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: "This match already has a dispute" });
       }
 
+      // Check if 5-minute dispute window has expired (only for completed/approved matches)
+      if (match.status === "completed" && match.approvedAt) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        if (new Date(match.approvedAt) <= fiveMinutesAgo) {
+          return res.status(400).json({ message: "Dispute window has expired. You can only dispute within 5 minutes of approval." });
+        }
+      }
+
+      // Check if settlement already executed
+      if (match.settlementExecutedAt) {
+        return res.status(400).json({ message: "Cannot dispute - funds have already been transferred" });
+      }
+
       const disputedMatch = await storage.raiseDispute(match.id, req.user!.id, parsed.data.reason, parsed.data.evidence);
       res.json(disputedMatch);
     } catch (error) {
