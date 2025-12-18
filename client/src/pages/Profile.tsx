@@ -4,8 +4,24 @@ import { Navbar } from "@/components/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Wallet, Trophy, Target, Shield } from "lucide-react";
-import type { Wallet as WalletType, Match } from "@/lib/types";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Wallet, Trophy, Target, Shield, TrendingUp, TrendingDown, Gamepad2, Eye } from "lucide-react";
+import type { Wallet as WalletType } from "@/lib/types";
+
+interface PlayerStats {
+  userId: string;
+  username: string;
+  gamerUsername: string | null;
+  profileImageUrl: string | null;
+  wins: number;
+  losses: number;
+  totalMatches: number;
+  winRate: number;
+  totalEarnings: number;
+  totalBetAmount: number;
+  spectatorBetsWon: number;
+  spectatorBetsLost: number;
+}
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -15,18 +31,14 @@ export default function Profile() {
     enabled: !!user,
   });
 
-  const { data: matches = [] } = useQuery<Match[]>({
-    queryKey: ["/api/matches/my"],
+  const { data: stats, isLoading: statsLoading } = useQuery<PlayerStats>({
+    queryKey: ["/api/stats"],
     enabled: !!user,
   });
 
   const personalWallet = wallets.find(w => w.type === "personal");
   const escrowWallet = wallets.find(w => w.type === "escrow");
   const spectatorWallet = wallets.find(w => w.type === "spectator");
-
-  const completedMatches = matches.filter(m => m.status === "completed");
-  const wonMatches = completedMatches.filter(m => m.winnerId === user?.id);
-  const totalBalance = wallets.reduce((sum, w) => sum + parseFloat(w.balance), 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,27 +107,81 @@ export default function Profile() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Match Statistics</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Gamepad2 className="h-5 w-5" />
+              Match Statistics
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-3xl font-bold" data-testid="text-matches-played">{completedMatches.length}</p>
-                <p className="text-sm text-muted-foreground">Matches Played</p>
+            {statsLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-20" />
+                ))}
               </div>
-              <div>
-                <p className="text-3xl font-bold text-green-500" data-testid="text-matches-won">{wonMatches.length}</p>
-                <p className="text-sm text-muted-foreground">Matches Won</p>
+            ) : stats ? (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div className="p-3 rounded-md bg-muted/50">
+                    <p className="text-2xl font-bold text-green-500" data-testid="text-matches-won">
+                      {stats.wins}
+                    </p>
+                    <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      Wins
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-md bg-muted/50">
+                    <p className="text-2xl font-bold text-red-500" data-testid="text-matches-lost">
+                      {stats.losses}
+                    </p>
+                    <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                      <TrendingDown className="h-3 w-3" />
+                      Losses
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-md bg-muted/50">
+                    <p className="text-2xl font-bold" data-testid="text-win-rate">
+                      {stats.winRate}%
+                    </p>
+                    <p className="text-sm text-muted-foreground">Win Rate</p>
+                  </div>
+                  <div className="p-3 rounded-md bg-muted/50">
+                    <p
+                      className={`text-2xl font-bold ${
+                        stats.totalEarnings >= 0 ? "text-green-500" : "text-red-500"
+                      }`}
+                      data-testid="text-net-earnings"
+                    >
+                      {stats.totalEarnings >= 0 ? "+" : ""}${stats.totalEarnings.toFixed(2)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Net Earnings</p>
+                  </div>
+                </div>
+                <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm text-muted-foreground">
+                  <div>
+                    <p>Total matches played: <span className="font-medium text-foreground">{stats.totalMatches}</span></p>
+                    <p>Total bet amount: <span className="font-medium text-foreground">${stats.totalBetAmount.toFixed(2)}</span></p>
+                  </div>
+                  <div>
+                    <p className="flex items-center gap-1">
+                      <Eye className="h-3 w-3" />
+                      Spectator bets won: <span className="font-medium text-green-500 ml-1">{stats.spectatorBetsWon}</span>
+                    </p>
+                    <p className="flex items-center gap-1">
+                      <Eye className="h-3 w-3" />
+                      Spectator bets lost: <span className="font-medium text-red-500 ml-1">{stats.spectatorBetsLost}</span>
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Gamepad2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No match statistics yet.</p>
+                <p className="text-sm mt-1">Complete your first match to see your stats!</p>
               </div>
-              <div>
-                <p className="text-3xl font-bold" data-testid="text-win-rate">
-                  {completedMatches.length > 0 
-                    ? Math.round((wonMatches.length / completedMatches.length) * 100) 
-                    : 0}%
-                </p>
-                <p className="text-sm text-muted-foreground">Win Rate</p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </main>
