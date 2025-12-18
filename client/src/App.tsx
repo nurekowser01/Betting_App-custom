@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
 import Profile from "@/pages/Profile";
+import UserProfile from "@/pages/UserProfile";
 import TransactionHistory from "@/pages/TransactionHistory";
 import NotFound from "@/pages/not-found";
 
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/admin" component={Admin} />
       <Route path="/profile" component={Profile} />
+      <Route path="/user/:id" component={UserProfile} />
       <Route path="/transactions" component={TransactionHistory} />
       <Route component={NotFound} />
     </Switch>
