@@ -18,8 +18,22 @@ interface AdminUser {
   isAdmin: number;
 }
 
+interface SpectatorBetSummary {
+  totalBets: number;
+  betsOnPlayer1: number;
+  betsOnPlayer2: number;
+  potentialPayoutPlayer1: number;
+  potentialPayoutPlayer2: number;
+  betCount: number;
+}
+
 interface LiveMatch extends Match {
   totalSpectatorBets?: number;
+  spectatorBetSummary?: SpectatorBetSummary;
+}
+
+interface PendingMatch extends Match {
+  spectatorBetSummary?: SpectatorBetSummary;
 }
 
 const adminLevelLabels: Record<number, string> = {
@@ -41,7 +55,7 @@ export default function Admin() {
 
   const isSuperAdmin = user?.isAdmin === 2;
 
-  const { data: pendingMatches = [], isLoading: pendingLoading } = useQuery<Match[]>({
+  const { data: pendingMatches = [], isLoading: pendingLoading } = useQuery<PendingMatch[]>({
     queryKey: ["/api/admin/matches/pending"],
     enabled: user?.isAdmin !== undefined && user.isAdmin >= 1,
   });
@@ -211,7 +225,7 @@ export default function Admin() {
                           className="p-4 border rounded-md bg-muted/30"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                               <div className="font-medium">{match.game}</div>
                               <div className="text-sm text-muted-foreground">
                                 {match.player1?.username} vs {match.player2?.username}
@@ -222,6 +236,34 @@ export default function Admin() {
                               {match.reportedWinner && (
                                 <div className="text-sm">
                                   Reported winner: <span className="font-medium text-primary">{match.reportedWinner.username}</span>
+                                </div>
+                              )}
+                              
+                              {match.spectatorBetSummary && match.spectatorBetSummary.betCount > 0 && (
+                                <div className="mt-3 p-3 rounded-md bg-accent/30 space-y-2">
+                                  <div className="text-sm font-medium flex items-center gap-2">
+                                    <Eye className="h-4 w-4" />
+                                    Spectator Bets ({match.spectatorBetSummary.betCount})
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="p-2 rounded bg-background/50">
+                                      <div className="text-xs text-muted-foreground">Bets on {match.player1?.username}</div>
+                                      <div className="font-bold">${match.spectatorBetSummary.betsOnPlayer1.toFixed(2)}</div>
+                                      <div className="text-xs text-chart-2">
+                                        Potential payout: ${match.spectatorBetSummary.potentialPayoutPlayer1.toFixed(2)}
+                                      </div>
+                                    </div>
+                                    <div className="p-2 rounded bg-background/50">
+                                      <div className="text-xs text-muted-foreground">Bets on {match.player2?.username}</div>
+                                      <div className="font-bold">${match.spectatorBetSummary.betsOnPlayer2.toFixed(2)}</div>
+                                      <div className="text-xs text-chart-2">
+                                        Potential payout: ${match.spectatorBetSummary.potentialPayoutPlayer2.toFixed(2)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground pt-1 border-t">
+                                    Total spectator stake: <span className="font-medium">${match.spectatorBetSummary.totalBets.toFixed(2)}</span>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -306,8 +348,8 @@ export default function Admin() {
                         data-testid={`card-live-match-${match.id}`}
                         className="p-4 border rounded-md bg-muted/30"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div className="space-y-1">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="space-y-2">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                               <span className="font-medium">{match.game}</span>
@@ -315,8 +357,11 @@ export default function Admin() {
                             <div className="text-sm text-muted-foreground">
                               {match.player1?.username} vs {match.player2?.username}
                             </div>
+                            <div className="text-sm">
+                              Match bet: <span className="font-medium">${match.betAmount}</span> each
+                            </div>
                           </div>
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-4 flex-wrap">
                             <div className="text-center">
                               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                 <DollarSign className="h-4 w-4" />
@@ -327,9 +372,9 @@ export default function Admin() {
                             <div className="text-center">
                               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                 <Eye className="h-4 w-4" />
-                                <span>Spectators</span>
+                                <span>Bettors</span>
                               </div>
-                              <div className="font-bold">{match.spectatorCount}</div>
+                              <div className="font-bold">{match.spectatorBetSummary?.betCount || 0}</div>
                             </div>
                             <div className="text-center">
                               <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -340,6 +385,27 @@ export default function Admin() {
                             </div>
                           </div>
                         </div>
+                        
+                        {match.spectatorBetSummary && match.spectatorBetSummary.betCount > 0 && (
+                          <div className="mt-3 pt-3 border-t">
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div className="p-2 rounded bg-accent/30">
+                                <div className="text-xs text-muted-foreground">Bets on {match.player1?.username}</div>
+                                <div className="font-bold">${match.spectatorBetSummary.betsOnPlayer1.toFixed(2)}</div>
+                                <div className="text-xs text-chart-2">
+                                  Potential payout: ${match.spectatorBetSummary.potentialPayoutPlayer1.toFixed(2)}
+                                </div>
+                              </div>
+                              <div className="p-2 rounded bg-accent/30">
+                                <div className="text-xs text-muted-foreground">Bets on {match.player2?.username}</div>
+                                <div className="font-bold">${match.spectatorBetSummary.betsOnPlayer2.toFixed(2)}</div>
+                                <div className="text-xs text-chart-2">
+                                  Potential payout: ${match.spectatorBetSummary.potentialPayoutPlayer2.toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

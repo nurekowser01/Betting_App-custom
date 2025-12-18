@@ -501,16 +501,37 @@ export async function registerRoutes(
 
       const pendingMatches = await storage.getPendingApprovalMatches();
       
-      // Enrich with player info
+      // Enrich with player info and spectator bet summary
       const enrichedMatches = await Promise.all(pendingMatches.map(async (match) => {
         const player1 = await storage.getUser(match.player1Id);
         const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
         const reportedWinner = match.reportedWinnerId ? await storage.getUser(match.reportedWinnerId) : null;
+        
+        // Get spectator bets summary
+        const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
+        const totalSpectatorBets = spectatorBets.reduce((sum, bet) => sum + parseFloat(bet.amount), 0);
+        const betsOnPlayer1 = spectatorBets
+          .filter(bet => bet.predictedWinnerId === match.player1Id)
+          .reduce((sum, bet) => sum + parseFloat(bet.amount), 0);
+        const betsOnPlayer2 = match.player2Id 
+          ? spectatorBets.filter(bet => bet.predictedWinnerId === match.player2Id).reduce((sum, bet) => sum + parseFloat(bet.amount), 0)
+          : 0;
+        const potentialPayoutPlayer1 = betsOnPlayer1 * 1.9;
+        const potentialPayoutPlayer2 = betsOnPlayer2 * 1.9;
+        
         return {
           ...match,
           player1: player1 ? { id: player1.id, username: player1.username } : null,
           player2: player2 ? { id: player2.id, username: player2.username } : null,
           reportedWinner: reportedWinner ? { id: reportedWinner.id, username: reportedWinner.username } : null,
+          spectatorBetSummary: {
+            totalBets: totalSpectatorBets,
+            betsOnPlayer1,
+            betsOnPlayer2,
+            potentialPayoutPlayer1,
+            potentialPayoutPlayer2,
+            betCount: spectatorBets.length,
+          },
         };
       }));
 
@@ -746,11 +767,30 @@ export async function registerRoutes(
         const player1 = await storage.getUser(match.player1Id);
         const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
         const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
+        
+        const totalSpectatorBets = spectatorBets.reduce((sum, bet) => sum + parseFloat(bet.amount), 0);
+        const betsOnPlayer1 = spectatorBets
+          .filter(bet => bet.predictedWinnerId === match.player1Id)
+          .reduce((sum, bet) => sum + parseFloat(bet.amount), 0);
+        const betsOnPlayer2 = match.player2Id 
+          ? spectatorBets.filter(bet => bet.predictedWinnerId === match.player2Id).reduce((sum, bet) => sum + parseFloat(bet.amount), 0)
+          : 0;
+        const potentialPayoutPlayer1 = betsOnPlayer1 * 1.9;
+        const potentialPayoutPlayer2 = betsOnPlayer2 * 1.9;
+        
         return {
           ...match,
           player1: player1 ? { id: player1.id, username: player1.username } : null,
           player2: player2 ? { id: player2.id, username: player2.username } : null,
-          totalSpectatorBets: spectatorBets.reduce((sum, bet) => sum + parseFloat(bet.amount), 0),
+          totalSpectatorBets,
+          spectatorBetSummary: {
+            totalBets: totalSpectatorBets,
+            betsOnPlayer1,
+            betsOnPlayer2,
+            potentialPayoutPlayer1,
+            potentialPayoutPlayer2,
+            betCount: spectatorBets.length,
+          },
         };
       }));
 
