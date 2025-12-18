@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "./queryClient";
 import type { User } from "./types";
 
@@ -14,67 +13,48 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data: user, isLoading, refetch } = useQuery<User | null>({
-    queryKey: ["/api/auth/me"],
-    queryFn: async () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function checkAuth() {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
         if (res.ok) {
-          return res.json();
+          const userData = await res.json();
+          setUser(userData);
         }
-        return null;
       } catch {
-        return null;
+        // Not authenticated
+      } finally {
+        setIsLoading(false);
       }
-    },
-    retry: false,
-  });
-
-  const loginMutation = useMutation({
-    mutationFn: async ({ username, password }: { username: string; password: string }) => {
-      const res = await apiRequest("POST", "/api/auth/login", { username, password });
-      return res.json();
-    },
-    onSuccess: async (data) => {
-      queryClient.setQueryData(["/api/auth/me"], data);
-      await refetch();
-    },
-  });
-
-  const registerMutation = useMutation({
-    mutationFn: async ({ username, password }: { username: string; password: string }) => {
-      const res = await apiRequest("POST", "/api/auth/register", { username, password });
-      return res.json();
-    },
-    onSuccess: async (data) => {
-      queryClient.setQueryData(["/api/auth/me"], data);
-      await refetch();
-    },
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/auth/logout", {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
-  });
+    }
+    checkAuth();
+  }, []);
 
   const login = async (username: string, password: string) => {
-    await loginMutation.mutateAsync({ username, password });
+    const res = await apiRequest("POST", "/api/auth/login", { username, password });
+    const userData = await res.json();
+    setUser(userData);
+    queryClient.invalidateQueries();
   };
 
   const register = async (username: string, password: string) => {
-    await registerMutation.mutateAsync({ username, password });
+    const res = await apiRequest("POST", "/api/auth/register", { username, password });
+    const userData = await res.json();
+    setUser(userData);
+    queryClient.invalidateQueries();
   };
 
   const logout = async () => {
-    await logoutMutation.mutateAsync();
+    await apiRequest("POST", "/api/auth/logout", {});
+    setUser(null);
+    queryClient.invalidateQueries();
   };
 
   return (
-    <AuthContext.Provider value={{ user: user ?? null, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
