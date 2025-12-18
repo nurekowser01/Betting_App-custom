@@ -21,7 +21,7 @@ export function HeroSection({ onCreateMatch, onBrowseFixtures, totalBets = 12847
       <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-20">
         <div className="max-w-2xl">
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
-            Bet. Play. <span className="text-primary">Win.</span>
+            <span className="text-primary">Playmate</span>
           </h1>
           <p className="text-xl text-gray-300 mb-8 leading-relaxed">
             Challenge players to PlayStation matches, stake your claim, and win big. 
