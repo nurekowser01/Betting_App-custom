@@ -216,9 +216,16 @@ export function MatchCard({
             </Button>
           )}
           {match.status === 'completed' && (
-            <Button className="flex-1" variant="secondary" onClick={onViewResults} data-testid="button-view-results">
-              View Results
-            </Button>
+            <>
+              <Button className="flex-1" variant="secondary" onClick={onViewResults} data-testid="button-view-results">
+                View Results
+              </Button>
+              {isParticipant && match.disputeStatus === 'none' && (
+                <Button variant="destructive" size="sm" onClick={onDispute} data-testid="button-dispute-completed">
+                  Dispute
+                </Button>
+              )}
+            </>
           )}
           {match.status === 'waiting' && isCreator && !match.player2 && !hasProposal && (
             <>
