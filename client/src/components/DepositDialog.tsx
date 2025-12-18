@@ -138,11 +138,11 @@ export function DepositDialog({ open, onOpenChange, onDeposit, walletType = 'per
                   <span className="text-sm">Cryptocurrency</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pay with Bitcoin, Ethereum, USDC, or other cryptocurrencies. Converted to USD credits automatically.
+                  Pay with USDT, BTC, ETH, or 50+ other cryptocurrencies via Binance Pay. Converted to USD credits automatically.
                 </p>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <ExternalLink className="h-3 w-3" />
-                  Opens Coinbase Commerce checkout
+                  Opens Binance Pay checkout
                 </div>
               </div>
             </TabsContent>

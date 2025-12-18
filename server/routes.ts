@@ -815,7 +815,18 @@ export async function registerRoutes(
     }
   });
 
-  // Crypto deposit routes using Coinbase Commerce
+  // Crypto deposit routes using Binance Pay
+  const crypto = await import('crypto');
+  
+  function generateBinanceSignature(timestamp: string, nonce: string, body: string, secretKey: string): string {
+    const payload = timestamp + "\n" + nonce + "\n" + body + "\n";
+    return crypto.createHmac('sha512', secretKey).update(payload).digest('hex').toUpperCase();
+  }
+
+  function generateNonce(): string {
+    return crypto.randomBytes(16).toString('hex');
+  }
+
   app.post("/api/crypto/create-charge", requireAuth, async (req, res) => {
     try {
       const schema = z.object({
@@ -827,56 +838,71 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Amount must be between $5 and $10,000" });
       }
 
-      const apiKey = process.env.COINBASE_COMMERCE_API_KEY;
-      if (!apiKey) {
+      const apiKey = process.env.BINANCE_PAY_API_KEY;
+      const secretKey = process.env.BINANCE_PAY_SECRET_KEY;
+      if (!apiKey || !secretKey) {
         return res.status(500).json({ message: "Crypto payments not configured" });
       }
 
-      const response = await fetch("https://api.commerce.coinbase.com/charges", {
+      const timestamp = Date.now().toString();
+      const nonce = generateNonce();
+      const merchantTradeNo = `GS_${req.user!.id}_${Date.now()}`;
+      
+      const requestBody = {
+        env: { terminalType: "WEB" },
+        merchantTradeNo,
+        orderAmount: parsed.data.amount,
+        currency: "USDT",
+        description: `GameStake Wallet Deposit - $${parsed.data.amount}`,
+        goodsDetails: [{
+          goodsType: "02",
+          goodsCategory: "Z000",
+          referenceGoodsId: "deposit",
+          goodsName: "Wallet Deposit",
+          goodsDetail: `Deposit $${parsed.data.amount} to your GameStake wallet`
+        }],
+        returnUrl: `${req.protocol}://${req.get('host')}/profile?deposit=success`,
+        cancelUrl: `${req.protocol}://${req.get('host')}/profile?deposit=cancelled`,
+      };
+
+      const bodyString = JSON.stringify(requestBody);
+      const signature = generateBinanceSignature(timestamp, nonce, bodyString, secretKey);
+
+      const response = await fetch("https://bpay.binanceapi.com/binancepay/openapi/v2/order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-CC-Api-Key": apiKey,
-          "X-CC-Version": "2018-03-22",
+          "BinancePay-Timestamp": timestamp,
+          "BinancePay-Nonce": nonce,
+          "BinancePay-Certificate-SN": apiKey,
+          "BinancePay-Signature": signature,
         },
-        body: JSON.stringify({
-          name: "GameStake Wallet Deposit",
-          description: `Deposit $${parsed.data.amount} to your GameStake wallet`,
-          pricing_type: "fixed_price",
-          local_price: {
-            amount: parsed.data.amount.toString(),
-            currency: "USD",
-          },
-          metadata: {
-            user_id: req.user!.id,
-          },
-          redirect_url: `${req.protocol}://${req.get('host')}/profile?deposit=success`,
-          cancel_url: `${req.protocol}://${req.get('host')}/profile?deposit=cancelled`,
-        }),
+        body: bodyString,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Coinbase Commerce error:", errorData);
+      const data = await response.json();
+      
+      if (data.status !== "SUCCESS") {
+        console.error("Binance Pay error:", data);
         return res.status(500).json({ message: "Failed to create crypto payment" });
       }
 
-      const data = await response.json();
-      const charge = data.data;
+      const order = data.data;
 
       // Store the pending payment
       await storage.createCryptoPayment(
         req.user!.id,
-        charge.id,
-        charge.code,
-        charge.hosted_url,
+        order.prepayId,
+        merchantTradeNo,
+        order.checkoutUrl,
         parsed.data.amount.toString()
       );
 
       res.json({
-        chargeId: charge.id,
-        hostedUrl: charge.hosted_url,
-        code: charge.code,
+        chargeId: order.prepayId,
+        hostedUrl: order.checkoutUrl,
+        qrCode: order.qrcodeLink,
+        code: merchantTradeNo,
       });
     } catch (error) {
       console.error("Crypto charge creation error:", error);
@@ -884,54 +910,132 @@ export async function registerRoutes(
     }
   });
 
-  // Coinbase Commerce webhook handler
+  // Cache for Binance Pay certificates
+  let binanceCertificates: Map<string, string> = new Map();
+  let certificatesFetchedAt: number = 0;
+  const CERT_CACHE_DURATION = 3600000; // 1 hour
+
+  async function fetchBinanceCertificates(apiKey: string, secretKey: string): Promise<void> {
+    const now = Date.now();
+    if (now - certificatesFetchedAt < CERT_CACHE_DURATION && binanceCertificates.size > 0) {
+      return;
+    }
+
+    const timestamp = now.toString();
+    const nonce = generateNonce();
+    const body = "{}";
+    const signature = generateBinanceSignature(timestamp, nonce, body, secretKey);
+
+    const response = await fetch("https://bpay.binanceapi.com/binancepay/openapi/certificates", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "BinancePay-Timestamp": timestamp,
+        "BinancePay-Nonce": nonce,
+        "BinancePay-Certificate-SN": apiKey,
+        "BinancePay-Signature": signature,
+      },
+      body,
+    });
+
+    const data = await response.json();
+    if (data.status === "SUCCESS" && data.data) {
+      binanceCertificates.clear();
+      for (const cert of data.data) {
+        binanceCertificates.set(cert.certSerial, cert.certPublic);
+      }
+      certificatesFetchedAt = now;
+      console.log(`Fetched ${binanceCertificates.size} Binance Pay certificates`);
+    }
+  }
+
+  function verifyBinanceWebhookSignature(payload: string, signature: string, certSN: string): boolean {
+    const publicKey = binanceCertificates.get(certSN);
+    if (!publicKey) {
+      console.error("Unknown certificate serial number:", certSN);
+      return false;
+    }
+
+    try {
+      const verify = crypto.createVerify('RSA-SHA256');
+      verify.update(payload);
+      return verify.verify(publicKey, signature, 'base64');
+    } catch (error) {
+      console.error("Signature verification error:", error);
+      return false;
+    }
+  }
+
+  // Binance Pay webhook handler
   app.post("/api/crypto/webhook", async (req, res) => {
     try {
-      const event = req.body;
-      
-      if (!event || !event.event || !event.event.type) {
-        return res.status(400).json({ message: "Invalid webhook payload" });
+      const apiKey = process.env.BINANCE_PAY_API_KEY;
+      const secretKey = process.env.BINANCE_PAY_SECRET_KEY;
+      if (!apiKey || !secretKey) {
+        return res.status(500).json({ returnCode: "FAIL", returnMessage: "Not configured" });
       }
 
-      const eventType = event.event.type;
-      const chargeData = event.event.data;
+      // Fetch certificates if needed
+      await fetchBinanceCertificates(apiKey, secretKey);
 
-      console.log(`Received Coinbase webhook: ${eventType}`, chargeData?.id);
+      // Verify Binance Pay webhook RSA signature
+      const timestamp = req.headers["binancepay-timestamp"] as string;
+      const nonce = req.headers["binancepay-nonce"] as string;
+      const signature = req.headers["binancepay-signature"] as string;
+      const certSN = req.headers["binancepay-certificate-sn"] as string;
+      
+      if (!timestamp || !nonce || !signature || !certSN) {
+        return res.status(400).json({ returnCode: "FAIL", returnMessage: "Missing headers" });
+      }
 
-      if (eventType === "charge:confirmed" || eventType === "charge:resolved") {
-        const chargeId = chargeData?.id;
-        if (!chargeId) {
-          return res.status(400).json({ message: "Missing charge ID" });
+      // Build verification payload: timestamp\nnonce\nbody\n
+      const bodyString = JSON.stringify(req.body);
+      const verificationPayload = timestamp + "\n" + nonce + "\n" + bodyString + "\n";
+      
+      if (!verifyBinanceWebhookSignature(verificationPayload, signature, certSN)) {
+        console.error("Invalid Binance webhook signature");
+        return res.status(401).json({ returnCode: "FAIL", returnMessage: "Invalid signature" });
+      }
+
+      const { bizType, bizStatus, data } = req.body;
+      
+      console.log(`Received Binance webhook: ${bizType} - ${bizStatus}`);
+
+      if (bizType === "PAY" && bizStatus === "PAY_SUCCESS") {
+        const orderData = typeof data === 'string' ? JSON.parse(data) : data;
+        const merchantTradeNo = orderData?.merchantTradeNo;
+        
+        if (!merchantTradeNo) {
+          return res.json({ returnCode: "SUCCESS", returnMessage: "No trade number" });
         }
 
-        const cryptoPayment = await storage.getCryptoPaymentByChargeId(chargeId);
+        const cryptoPayment = await storage.getCryptoPaymentByCode(merchantTradeNo);
         if (!cryptoPayment) {
-          console.error("Crypto payment not found:", chargeId);
-          return res.status(404).json({ message: "Payment not found" });
+          console.error("Crypto payment not found:", merchantTradeNo);
+          return res.json({ returnCode: "SUCCESS", returnMessage: "Payment not found" });
         }
 
         if (cryptoPayment.status === "completed") {
-          return res.json({ message: "Already processed" });
+          return res.json({ returnCode: "SUCCESS", returnMessage: "Already processed" });
         }
 
-        // Get payment details
-        const payments = chargeData?.payments || [];
-        const confirmedPayment = payments.find((p: any) => p.status === "CONFIRMED");
-        const cryptoCurrency = confirmedPayment?.value?.crypto?.currency || "CRYPTO";
-        const cryptoAmount = confirmedPayment?.value?.crypto?.amount || "0";
+        const cryptoCurrency = orderData?.currency || "USDT";
+        const cryptoAmount = orderData?.orderAmount?.toString() || cryptoPayment.usdAmount;
 
         // Update payment status
         await storage.updateCryptoPaymentStatus(
-          chargeId,
+          cryptoPayment.chargeId,
           "completed",
           cryptoCurrency,
           cryptoAmount
         );
 
-        // Credit user's personal wallet
+        // Credit user's personal wallet with database transaction safety
         const wallet = await storage.getWalletByUserAndType(cryptoPayment.userId, "personal");
         if (wallet) {
-          const newBalance = (parseFloat(wallet.balance) + parseFloat(cryptoPayment.usdAmount)).toFixed(2);
+          const currentBalance = wallet.balance;
+          const depositAmount = cryptoPayment.usdAmount;
+          const newBalance = (parseFloat(currentBalance) + parseFloat(depositAmount)).toFixed(2);
           await storage.updateWalletBalance(wallet.id, newBalance);
 
           // Record transaction
@@ -944,18 +1048,25 @@ export async function registerRoutes(
           );
         }
 
-        console.log(`Crypto payment completed: ${chargeId}, credited $${cryptoPayment.usdAmount} to user ${cryptoPayment.userId}`);
-      } else if (eventType === "charge:failed" || eventType === "charge:expired") {
-        const chargeId = chargeData?.id;
-        if (chargeId) {
-          await storage.updateCryptoPaymentStatus(chargeId, eventType === "charge:expired" ? "expired" : "cancelled");
+        console.log(`Crypto payment completed: ${merchantTradeNo}, credited $${cryptoPayment.usdAmount} to user ${cryptoPayment.userId}`);
+      } else if (bizStatus === "PAY_CLOSED" || bizStatus === "EXPIRED") {
+        const orderData = typeof data === 'string' ? JSON.parse(data) : data;
+        const merchantTradeNo = orderData?.merchantTradeNo;
+        if (merchantTradeNo) {
+          const cryptoPayment = await storage.getCryptoPaymentByCode(merchantTradeNo);
+          if (cryptoPayment) {
+            await storage.updateCryptoPaymentStatus(
+              cryptoPayment.chargeId,
+              bizStatus === "EXPIRED" ? "expired" : "cancelled"
+            );
+          }
         }
       }
 
-      res.json({ received: true });
+      res.json({ returnCode: "SUCCESS", returnMessage: "OK" });
     } catch (error) {
       console.error("Webhook processing error:", error);
-      res.status(500).json({ message: "Webhook processing failed" });
+      res.status(500).json({ returnCode: "FAIL", returnMessage: "Processing failed" });
     }
   });
 

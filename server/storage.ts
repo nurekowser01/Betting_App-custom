@@ -46,6 +46,7 @@ export interface IStorage {
   
   createCryptoPayment(userId: string, chargeId: string, chargeCode: string, hostedUrl: string, usdAmount: string): Promise<CryptoPayment>;
   getCryptoPaymentByChargeId(chargeId: string): Promise<CryptoPayment | undefined>;
+  getCryptoPaymentByCode(chargeCode: string): Promise<CryptoPayment | undefined>;
   updateCryptoPaymentStatus(chargeId: string, status: 'pending' | 'completed' | 'expired' | 'cancelled', cryptoCurrency?: string, cryptoAmount?: string): Promise<CryptoPayment | undefined>;
   getCryptoPaymentsByUserId(userId: string): Promise<CryptoPayment[]>;
 }
@@ -323,6 +324,11 @@ export class DatabaseStorage implements IStorage {
 
   async getCryptoPaymentByChargeId(chargeId: string): Promise<CryptoPayment | undefined> {
     const [payment] = await db.select().from(cryptoPayments).where(eq(cryptoPayments.chargeId, chargeId));
+    return payment;
+  }
+
+  async getCryptoPaymentByCode(chargeCode: string): Promise<CryptoPayment | undefined> {
+    const [payment] = await db.select().from(cryptoPayments).where(eq(cryptoPayments.chargeCode, chargeCode));
     return payment;
   }
 
