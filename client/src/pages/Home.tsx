@@ -10,6 +10,7 @@ import { DepositDialog } from "@/components/DepositDialog";
 import { SpectatorBetDialog } from "@/components/SpectatorBetDialog";
 import { CompleteMatchDialog } from "@/components/CompleteMatchDialog";
 import { DisputeDialog } from "@/components/DisputeDialog";
+import { MatchResultsDialog } from "@/components/MatchResultsDialog";
 import { TransactionList } from "@/components/TransactionList";
 import { AuthDialog } from "@/components/AuthDialog";
 import { Footer } from "@/components/Footer";
@@ -32,6 +33,7 @@ export default function Home() {
   const [spectatorBetOpen, setSpectatorBetOpen] = useState(false);
   const [completeMatchOpen, setCompleteMatchOpen] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   const { data: wallets = [], isLoading: walletsLoading } = useQuery<Wallet[]>({
@@ -374,6 +376,10 @@ export default function Home() {
                       onPropose={(amount) => proposeMutation.mutate({ matchId: match.id, proposedAmount: amount })}
                       onAcceptProposal={() => acceptProposalMutation.mutate(match.id)}
                       onRejectProposal={() => rejectProposalMutation.mutate(match.id)}
+                      onDispute={() => {
+                        setSelectedMatch(match);
+                        setDisputeOpen(true);
+                      }}
                       currentUserId={user?.id}
                     />
                   ))}
@@ -392,7 +398,14 @@ export default function Home() {
                     <MatchCard
                       key={match.id}
                       match={match}
-                      onViewResults={() => console.log('View results:', match.id)}
+                      onViewResults={() => {
+                        setSelectedMatch(match);
+                        setResultsOpen(true);
+                      }}
+                      onDispute={() => {
+                        setSelectedMatch(match);
+                        setDisputeOpen(true);
+                      }}
                       currentUserId={user?.id}
                     />
                   ))}
@@ -452,6 +465,11 @@ export default function Home() {
             match={selectedMatch}
             open={disputeOpen}
             onOpenChange={setDisputeOpen}
+          />
+          <MatchResultsDialog
+            match={selectedMatch}
+            open={resultsOpen}
+            onOpenChange={setResultsOpen}
           />
         </>
       )}
