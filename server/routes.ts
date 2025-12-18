@@ -90,6 +90,21 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/auth/gamer-username", requireAuth, async (req, res) => {
+    try {
+      const { gamerUsername } = req.body;
+      if (!gamerUsername || typeof gamerUsername !== 'string' || gamerUsername.trim().length < 2) {
+        return res.status(400).json({ message: "Gamer username must be at least 2 characters" });
+      }
+
+      await storage.updateGamerUsername(req.user!.id, gamerUsername.trim());
+      const updatedUser = await storage.getUser(req.user!.id);
+      res.json(updatedUser);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update gamer username" });
+    }
+  });
+
   // Wallet routes
   app.get("/api/wallets", requireAuth, async (req, res) => {
     try {

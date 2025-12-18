@@ -25,6 +25,7 @@ export const users = pgTable("users", {
   password: text("password"),
   email: varchar("email"),
   profileImageUrl: varchar("profile_image_url"),
+  gamerUsername: text("gamer_username"),
   isAdmin: integer("is_admin").notNull().default(0),
 });
 

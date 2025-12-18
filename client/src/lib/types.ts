@@ -3,6 +3,7 @@ export type WalletType = 'personal' | 'escrow' | 'spectator';
 export interface User {
   id: string;
   username: string;
+  gamerUsername?: string | null;
   isAdmin?: number;
 }
 

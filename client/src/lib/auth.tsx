@@ -8,6 +8,8 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<User>;
   register: (username: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  updateGamerUsername: (gamerUsername: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -55,8 +57,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await queryClient.invalidateQueries();
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+      }
+    } catch {
+      // Not authenticated
+    }
+  }, []);
+
+  const updateGamerUsername = useCallback(async (gamerUsername: string) => {
+    await apiRequest("PATCH", "/api/auth/gamer-username", { gamerUsername });
+    await refreshUser();
+  }, [refreshUser]);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser, updateGamerUsername }}>
       {children}
     </AuthContext.Provider>
   );

@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth";
+import { GamerUsernameDialog } from "@/components/GamerUsernameDialog";
 import { useEffect } from "react";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
@@ -33,6 +34,7 @@ function App() {
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
+          <GamerUsernameDialog />
           <Router />
         </TooltipProvider>
       </AuthProvider>

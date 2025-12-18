@@ -15,6 +15,7 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUserAdminLevel(userId: string, level: number): Promise<User | undefined>;
+  updateGamerUsername(userId: string, gamerUsername: string): Promise<User | undefined>;
   
   getWalletsByUserId(userId: string): Promise<Wallet[]>;
   getWallet(id: string): Promise<Wallet | undefined>;
@@ -104,6 +105,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserAdminLevel(userId: string, level: number): Promise<User | undefined> {
     const [user] = await db.update(users).set({ isAdmin: level }).where(eq(users.id, userId)).returning();
+    return user;
+  }
+
+  async updateGamerUsername(userId: string, gamerUsername: string): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ gamerUsername }).where(eq(users.id, userId)).returning();
     return user;
   }
 
