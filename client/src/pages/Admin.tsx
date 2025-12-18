@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -9,12 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2, Ban, Trash2, UserCheck, AlertTriangle } from "lucide-react";
+import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2, Ban, Trash2, UserCheck, AlertTriangle, Link2, GripVertical, Plus, Wallet, HelpCircle, MessageSquare, Phone, FileQuestion } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "wouter";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface AdminUser {
   id: string;
@@ -58,6 +61,149 @@ interface DisputedMatch extends Match {
   disputeRaisedBy?: { id: string; username: string } | null;
 }
 
+interface QuickLink {
+  id: string;
+  title: string;
+  url: string;
+  icon: string;
+  displayOrder: number;
+  isVisible: number;
+}
+
+const ICON_OPTIONS = [
+  { value: "link", label: "Link", icon: Link2 },
+  { value: "gamepad", label: "Games", icon: Gamepad2 },
+  { value: "wallet", label: "Wallet", icon: Wallet },
+  { value: "help", label: "How It Works", icon: HelpCircle },
+  { value: "message", label: "Support", icon: MessageSquare },
+  { value: "phone", label: "Contact", icon: Phone },
+  { value: "faq", label: "FAQ", icon: FileQuestion },
+  { value: "shield", label: "Dispute", icon: Shield },
+  { value: "eye", label: "Live", icon: Eye },
+];
+
+function SortableQuickLink({ 
+  link, 
+  onSave, 
+  onDelete,
+  isPending 
+}: { 
+  link: QuickLink; 
+  onSave: (id: string, data: Partial<QuickLink>) => void;
+  onDelete: (id: string) => void;
+  isPending: boolean;
+}) {
+  const [localTitle, setLocalTitle] = useState(link.title);
+  const [localUrl, setLocalUrl] = useState(link.url);
+
+  useEffect(() => {
+    setLocalTitle(link.title);
+    setLocalUrl(link.url);
+  }, [link.title, link.url]);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: link.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const IconComponent = ICON_OPTIONS.find(i => i.value === link.icon)?.icon || Link2;
+
+  const handleTitleBlur = () => {
+    if (localTitle !== link.title) {
+      onSave(link.id, { title: localTitle });
+    }
+  };
+
+  const handleUrlBlur = () => {
+    if (localUrl !== link.url) {
+      onSave(link.id, { url: localUrl });
+    }
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 border rounded-md bg-card"
+      data-testid={`sortable-link-${link.id}`}
+    >
+      <button
+        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground"
+        {...attributes}
+        {...listeners}
+        data-testid={`drag-handle-${link.id}`}
+      >
+        <GripVertical className="h-5 w-5" />
+      </button>
+
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+        <Input
+          value={localTitle}
+          onChange={(e) => setLocalTitle(e.target.value)}
+          onBlur={handleTitleBlur}
+          placeholder="Title"
+          className="md:col-span-1"
+          data-testid={`input-link-title-${link.id}`}
+        />
+        <Input
+          value={localUrl}
+          onChange={(e) => setLocalUrl(e.target.value)}
+          onBlur={handleUrlBlur}
+          placeholder="URL (e.g., /matches or https://...)"
+          className="md:col-span-2"
+          data-testid={`input-link-url-${link.id}`}
+        />
+        <Select
+          value={link.icon}
+          onValueChange={(value) => onSave(link.id, { icon: value })}
+        >
+          <SelectTrigger data-testid={`select-icon-${link.id}`}>
+            <div className="flex items-center gap-2">
+              <IconComponent className="h-4 w-4" />
+              <SelectValue />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {ICON_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                <div className="flex items-center gap-2">
+                  <opt.icon className="h-4 w-4" />
+                  {opt.label}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={link.isVisible === 1}
+          onCheckedChange={(checked) => onSave(link.id, { isVisible: checked ? 1 : 0 })}
+          data-testid={`switch-visible-${link.id}`}
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(link.id)}
+          disabled={isPending}
+          data-testid={`button-delete-${link.id}`}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const adminLevelLabels: Record<number, string> = {
   0: "User",
   1: "Admin",
@@ -97,7 +243,111 @@ export default function Admin() {
     enabled: user?.isAdmin !== undefined && user.isAdmin >= 1,
   });
 
+  const { data: quickLinks = [], isLoading: quickLinksLoading } = useQuery<QuickLink[]>({
+    queryKey: ["/api/admin/quick-links"],
+    enabled: user?.isAdmin !== undefined && user.isAdmin >= 1,
+  });
+
   const [disputeResolutions, setDisputeResolutions] = useState<Record<string, { winnerId: string; resolution: string }>>({});
+  const [localQuickLinks, setLocalQuickLinks] = useState<QuickLink[]>([]);
+  const [newLinkTitle, setNewLinkTitle] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+
+  useEffect(() => {
+    if (quickLinks.length > 0 || !quickLinksLoading) {
+      setLocalQuickLinks(quickLinks);
+    }
+  }, [quickLinks, quickLinksLoading]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const createQuickLinkMutation = useMutation({
+    mutationFn: async (data: { title: string; url: string }) => {
+      const res = await apiRequest("POST", "/api/admin/quick-links", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quick-links"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/quick-links"] });
+      setNewLinkTitle("");
+      setNewLinkUrl("");
+      toast({ title: "Quick link created" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create quick link", variant: "destructive" });
+    },
+  });
+
+  const updateQuickLinkMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<QuickLink> }) => {
+      const res = await apiRequest("PATCH", `/api/admin/quick-links/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quick-links"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/quick-links"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update quick link", variant: "destructive" });
+    },
+  });
+
+  const deleteQuickLinkMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/quick-links/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quick-links"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/quick-links"] });
+      toast({ title: "Quick link deleted" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete quick link", variant: "destructive" });
+    },
+  });
+
+  const reorderQuickLinksMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const res = await apiRequest("PATCH", "/api/admin/quick-links/reorder", { orderedIds });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/quick-links"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/quick-links"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to reorder quick links", variant: "destructive" });
+    },
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = localQuickLinks.findIndex((link) => link.id === active.id);
+      const newIndex = localQuickLinks.findIndex((link) => link.id === over.id);
+      const newOrder = arrayMove(localQuickLinks, oldIndex, newIndex);
+      setLocalQuickLinks(newOrder);
+      reorderQuickLinksMutation.mutate(newOrder.map(l => l.id));
+    }
+  };
+
+  const handleUpdateQuickLink = (id: string, data: Partial<QuickLink>) => {
+    updateQuickLinkMutation.mutate({ id, data });
+  };
+
+  const handleCreateQuickLink = () => {
+    if (!newLinkTitle.trim() || !newLinkUrl.trim()) {
+      toast({ title: "Error", description: "Title and URL are required", variant: "destructive" });
+      return;
+    }
+    createQuickLinkMutation.mutate({ title: newLinkTitle.trim(), url: newLinkUrl.trim() });
+  };
 
   const approveMutation = useMutation({
     mutationFn: async ({ matchId, winnerId }: { matchId: string; winnerId: string }) => {
@@ -363,6 +613,10 @@ export default function Admin() {
                 Integrations
               </TabsTrigger>
             )}
+            <TabsTrigger value="quick-links" className="gap-2" data-testid="tab-quick-links">
+              <Link2 className="h-4 w-4" />
+              Quick Links
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending">
@@ -1002,6 +1256,103 @@ export default function Admin() {
               </Card>
             </TabsContent>
           )}
+
+          <TabsContent value="quick-links">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Link2 className="h-5 w-5" />
+                  Quick Links Manager
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="p-4 border rounded-md bg-muted/30">
+                    <h4 className="font-medium mb-3">Add New Quick Link</h4>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Input
+                        placeholder="Link title (e.g., Create Match)"
+                        value={newLinkTitle}
+                        onChange={(e) => setNewLinkTitle(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-new-link-title"
+                      />
+                      <Input
+                        placeholder="URL (e.g., /create-match)"
+                        value={newLinkUrl}
+                        onChange={(e) => setNewLinkUrl(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-new-link-url"
+                      />
+                      <Button
+                        onClick={handleCreateQuickLink}
+                        disabled={createQuickLinkMutation.isPending || !newLinkTitle.trim() || !newLinkUrl.trim()}
+                        data-testid="button-add-quick-link"
+                      >
+                        {createQuickLinkMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Link
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {quickLinksLoading ? (
+                    <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                  ) : localQuickLinks.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No quick links yet.</p>
+                      <p className="text-sm mt-1">Add your first quick link above!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium">Manage Links</h4>
+                        <p className="text-sm text-muted-foreground">Drag to reorder, toggle visibility</p>
+                      </div>
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={localQuickLinks.map(l => l.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <div className="space-y-2">
+                            {localQuickLinks.map((link) => (
+                              <SortableQuickLink
+                                key={link.id}
+                                link={link}
+                                onSave={handleUpdateQuickLink}
+                                onDelete={(id) => deleteQuickLinkMutation.mutate(id)}
+                                isPending={deleteQuickLinkMutation.isPending || updateQuickLinkMutation.isPending}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    </div>
+                  )}
+
+                  <div className="p-4 border rounded-md bg-accent/20">
+                    <h4 className="font-medium mb-2">How it works</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                      <li>Add quick links that appear in the navigation and footer</li>
+                      <li>Drag the handle to reorder links</li>
+                      <li>Toggle visibility to show/hide links without deleting them</li>
+                      <li>Choose an icon that represents each link</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </main>
     </div>
