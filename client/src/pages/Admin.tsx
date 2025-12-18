@@ -33,6 +33,21 @@ export default function Admin() {
     },
   });
 
+  const rejectMutation = useMutation({
+    mutationFn: async (matchId: string) => {
+      const res = await apiRequest("POST", `/api/admin/matches/${matchId}/reject`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/matches/pending"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      toast({ title: "Match rejected", description: "Funds have been refunded to both players." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to reject match", variant: "destructive" });
+    },
+  });
+
   if (!user || user.isAdmin !== 1) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -112,11 +127,11 @@ export default function Admin() {
                       </div>
                       <div className="flex flex-col gap-2">
                         <div className="text-sm text-muted-foreground mb-1">Approve winner:</div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
                             onClick={() => approveMutation.mutate({ matchId: match.id, winnerId: match.player1Id })}
-                            disabled={approveMutation.isPending}
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
                             data-testid={`button-approve-player1-${match.id}`}
                             variant={match.reportedWinnerId === match.player1Id ? "default" : "outline"}
                           >
@@ -126,7 +141,7 @@ export default function Admin() {
                           <Button
                             size="sm"
                             onClick={() => approveMutation.mutate({ matchId: match.id, winnerId: match.player2Id! })}
-                            disabled={approveMutation.isPending || !match.player2Id}
+                            disabled={approveMutation.isPending || rejectMutation.isPending || !match.player2Id}
                             data-testid={`button-approve-player2-${match.id}`}
                             variant={match.reportedWinnerId === match.player2Id ? "default" : "outline"}
                           >
@@ -134,6 +149,16 @@ export default function Admin() {
                             {match.player2?.username}
                           </Button>
                         </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => rejectMutation.mutate(match.id)}
+                          disabled={approveMutation.isPending || rejectMutation.isPending}
+                          data-testid={`button-reject-${match.id}`}
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Reject & Refund Both
+                        </Button>
                       </div>
                     </div>
                   </div>

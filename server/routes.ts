@@ -393,6 +393,70 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Reject match and refund both players
+  app.post("/api/admin/matches/:id/reject", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin !== 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const match = await storage.getMatch(req.params.id);
+
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.status !== "pending_approval") {
+        return res.status(400).json({ message: "Match is not pending approval" });
+      }
+
+      const betAmount = parseFloat(match.betAmount);
+
+      // Refund player 1
+      const player1Escrow = await storage.getWalletByUserAndType(match.player1Id, "escrow");
+      const player1Personal = await storage.getWalletByUserAndType(match.player1Id, "personal");
+      if (player1Escrow && player1Personal) {
+        const newEscrowBalance = (parseFloat(player1Escrow.balance) - betAmount).toFixed(2);
+        const newPersonalBalance = (parseFloat(player1Personal.balance) + betAmount).toFixed(2);
+        await storage.updateWalletBalance(player1Escrow.id, newEscrowBalance);
+        await storage.updateWalletBalance(player1Personal.id, newPersonalBalance);
+        await storage.createTransaction(match.player1Id, player1Personal.id, "refund", betAmount.toFixed(2), `Match rejected: ${match.game}`);
+      }
+
+      // Refund player 2
+      if (match.player2Id) {
+        const player2Escrow = await storage.getWalletByUserAndType(match.player2Id, "escrow");
+        const player2Personal = await storage.getWalletByUserAndType(match.player2Id, "personal");
+        if (player2Escrow && player2Personal) {
+          const newEscrowBalance = (parseFloat(player2Escrow.balance) - betAmount).toFixed(2);
+          const newPersonalBalance = (parseFloat(player2Personal.balance) + betAmount).toFixed(2);
+          await storage.updateWalletBalance(player2Escrow.id, newEscrowBalance);
+          await storage.updateWalletBalance(player2Personal.id, newPersonalBalance);
+          await storage.createTransaction(match.player2Id, player2Personal.id, "refund", betAmount.toFixed(2), `Match rejected: ${match.game}`);
+        }
+      }
+
+      // Refund spectator bets
+      const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
+      for (const bet of spectatorBets) {
+        await storage.updateSpectatorBetStatus(bet.id, "lost");
+        const spectatorWallet = await storage.getWalletByUserAndType(bet.userId, "spectator");
+        if (spectatorWallet) {
+          const refundAmount = parseFloat(bet.amount);
+          const newBalance = (parseFloat(spectatorWallet.balance) + refundAmount).toFixed(2);
+          await storage.updateWalletBalance(spectatorWallet.id, newBalance);
+          await storage.createTransaction(bet.userId, spectatorWallet.id, "refund", refundAmount.toFixed(2), `Match rejected: ${match.game}`);
+        }
+      }
+
+      const cancelledMatch = await storage.rejectMatch(match.id);
+      res.json(cancelledMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to reject match" });
+    }
+  });
+
   // Spectator bet routes
   app.post("/api/matches/:id/spectator-bet", requireAuth, async (req, res) => {
     try {

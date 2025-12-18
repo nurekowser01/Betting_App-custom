@@ -134,6 +134,13 @@ export class DatabaseStorage implements IStorage {
     return match;
   }
 
+  async rejectMatch(matchId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      status: "cancelled",
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
   async completeMatch(matchId: string, winnerId: string): Promise<Match | undefined> {
     const [match] = await db.update(matches).set({
       winnerId,
