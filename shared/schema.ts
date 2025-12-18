@@ -4,11 +4,12 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const walletTypeEnum = pgEnum('wallet_type', ['personal', 'escrow', 'spectator', 'platform']);
-export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pending_approval', 'completed', 'cancelled']);
+export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pending_approval', 'completed', 'cancelled', 'disputed']);
 export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund', 'platform_fee', 'crypto_deposit']);
 export const cryptoPaymentStatusEnum = pgEnum('crypto_payment_status', ['pending', 'completed', 'expired', 'cancelled']);
 export const betStatusEnum = pgEnum('bet_status', ['pending', 'won', 'lost']);
 export const integrationTypeEnum = pgEnum('integration_type', ['binance_pay', 'stripe', 'coinbase']);
+export const disputeStatusEnum = pgEnum('dispute_status', ['none', 'open', 'under_review', 'resolved']);
 
 // Session storage table for Replit Auth
 export const sessions = pgTable(
@@ -51,6 +52,12 @@ export const matches = pgTable("matches", {
   spectatorCount: integer("spectator_count").notNull().default(0),
   proposedAmount: decimal("proposed_amount", { precision: 10, scale: 2 }),
   proposedByUserId: varchar("proposed_by_user_id").references(() => users.id),
+  disputeStatus: disputeStatusEnum("dispute_status").notNull().default("none"),
+  disputeReason: text("dispute_reason"),
+  disputeEvidence: text("dispute_evidence"),
+  disputeRaisedById: varchar("dispute_raised_by_id").references(() => users.id),
+  disputeResolvedById: varchar("dispute_resolved_by_id").references(() => users.id),
+  disputeResolution: text("dispute_resolution"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
