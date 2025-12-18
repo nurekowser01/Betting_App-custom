@@ -59,6 +59,8 @@ export const matches = pgTable("matches", {
   disputeResolvedById: varchar("dispute_resolved_by_id").references(() => users.id),
   disputeResolution: text("dispute_resolution"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  settlementExecutedAt: timestamp("settlement_executed_at"),
 });
 
 export const spectatorBets = pgTable("spectator_bets", {
