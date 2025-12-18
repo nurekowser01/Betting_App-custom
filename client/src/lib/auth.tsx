@@ -1,12 +1,12 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { queryClient, apiRequest } from "./queryClient";
 import type { User } from "./types";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<User>;
+  register: (username: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -33,25 +33,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string): Promise<User> => {
     const res = await apiRequest("POST", "/api/auth/login", { username, password });
     const userData = await res.json();
     setUser(userData);
-    queryClient.invalidateQueries();
-  };
+    await queryClient.invalidateQueries();
+    return userData;
+  }, []);
 
-  const register = async (username: string, password: string) => {
+  const register = useCallback(async (username: string, password: string): Promise<User> => {
     const res = await apiRequest("POST", "/api/auth/register", { username, password });
     const userData = await res.json();
     setUser(userData);
-    queryClient.invalidateQueries();
-  };
+    await queryClient.invalidateQueries();
+    return userData;
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await apiRequest("POST", "/api/auth/logout", {});
     setUser(null);
-    queryClient.invalidateQueries();
-  };
+    await queryClient.invalidateQueries();
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
