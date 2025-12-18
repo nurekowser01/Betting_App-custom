@@ -8,6 +8,7 @@ export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pendi
 export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund', 'platform_fee', 'crypto_deposit']);
 export const cryptoPaymentStatusEnum = pgEnum('crypto_payment_status', ['pending', 'completed', 'expired', 'cancelled']);
 export const betStatusEnum = pgEnum('bet_status', ['pending', 'won', 'lost']);
+export const integrationTypeEnum = pgEnum('integration_type', ['binance_pay', 'stripe', 'coinbase']);
 
 // Session storage table for Replit Auth
 export const sessions = pgTable(
@@ -87,6 +88,19 @@ export const cryptoPayments = pgTable("crypto_payments", {
   completedAt: timestamp("completed_at"),
 });
 
+export const integrations = pgTable("integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: integrationTypeEnum("type").notNull().unique(),
+  enabled: integer("enabled").notNull().default(0),
+  apiKey: text("api_key"),
+  secretKey: text("secret_key"),
+  webhookSecret: text("webhook_secret"),
+  additionalConfig: jsonb("additional_config"),
+  lastTestedAt: timestamp("last_tested_at"),
+  testStatus: text("test_status"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -128,11 +142,20 @@ export const insertCryptoPaymentSchema = createInsertSchema(cryptoPayments).omit
   completedAt: true,
 });
 
+export const insertIntegrationSchema = createInsertSchema(integrations).omit({
+  id: true,
+  lastTestedAt: true,
+  testStatus: true,
+  updatedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
+export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
 export type User = typeof users.$inferSelect;
 export type Wallet = typeof wallets.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type SpectatorBet = typeof spectatorBets.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type CryptoPayment = typeof cryptoPayments.$inferSelect;
+export type Integration = typeof integrations.$inferSelect;

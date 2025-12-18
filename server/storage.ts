@@ -1,8 +1,8 @@
 import { db } from "./db";
 import { eq, and, desc, or, gte } from "drizzle-orm";
 import { 
-  users, wallets, matches, spectatorBets, transactions, cryptoPayments,
-  type User, type Wallet, type Match, type SpectatorBet, type Transaction, type CryptoPayment,
+  users, wallets, matches, spectatorBets, transactions, cryptoPayments, integrations,
+  type User, type Wallet, type Match, type SpectatorBet, type Transaction, type CryptoPayment, type Integration,
   type InsertUser, type UpsertUser
 } from "@shared/schema";
 import { randomUUID } from "crypto";
@@ -49,6 +49,12 @@ export interface IStorage {
   getCryptoPaymentByCode(chargeCode: string): Promise<CryptoPayment | undefined>;
   updateCryptoPaymentStatus(chargeId: string, status: 'pending' | 'completed' | 'expired' | 'cancelled', cryptoCurrency?: string, cryptoAmount?: string): Promise<CryptoPayment | undefined>;
   getCryptoPaymentsByUserId(userId: string): Promise<CryptoPayment[]>;
+  
+  getAllIntegrations(): Promise<Integration[]>;
+  getIntegration(type: 'binance_pay' | 'stripe' | 'coinbase'): Promise<Integration | undefined>;
+  upsertIntegration(type: 'binance_pay' | 'stripe' | 'coinbase', data: { enabled?: number; apiKey?: string; secretKey?: string; webhookSecret?: string; additionalConfig?: any }): Promise<Integration>;
+  updateIntegrationTestStatus(type: 'binance_pay' | 'stripe' | 'coinbase', testStatus: string): Promise<Integration | undefined>;
+  getEnabledIntegrations(): Promise<Integration[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -349,6 +355,48 @@ export class DatabaseStorage implements IStorage {
 
   async getCryptoPaymentsByUserId(userId: string): Promise<CryptoPayment[]> {
     return db.select().from(cryptoPayments).where(eq(cryptoPayments.userId, userId)).orderBy(desc(cryptoPayments.createdAt));
+  }
+
+  async getAllIntegrations(): Promise<Integration[]> {
+    return db.select().from(integrations);
+  }
+
+  async getIntegration(type: 'binance_pay' | 'stripe' | 'coinbase'): Promise<Integration | undefined> {
+    const [integration] = await db.select().from(integrations).where(eq(integrations.type, type));
+    return integration;
+  }
+
+  async upsertIntegration(type: 'binance_pay' | 'stripe' | 'coinbase', data: { enabled?: number; apiKey?: string; secretKey?: string; webhookSecret?: string; additionalConfig?: any }): Promise<Integration> {
+    const existing = await this.getIntegration(type);
+    if (existing) {
+      const [updated] = await db.update(integrations).set({
+        ...data,
+        updatedAt: new Date(),
+      }).where(eq(integrations.type, type)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(integrations).values({
+      type,
+      enabled: data.enabled ?? 0,
+      apiKey: data.apiKey,
+      secretKey: data.secretKey,
+      webhookSecret: data.webhookSecret,
+      additionalConfig: data.additionalConfig,
+    }).returning();
+    return created;
+  }
+
+  async updateIntegrationTestStatus(type: 'binance_pay' | 'stripe' | 'coinbase', testStatus: string): Promise<Integration | undefined> {
+    const [integration] = await db.update(integrations).set({
+      testStatus,
+      lastTestedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(integrations.type, type)).returning();
+    return integration;
+  }
+
+  async getEnabledIntegrations(): Promise<Integration[]> {
+    return db.select().from(integrations).where(eq(integrations.enabled, 1));
   }
 }
 
