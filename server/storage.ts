@@ -133,7 +133,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(userId: string): Promise<boolean> {
-    const result = await db.delete(users).where(eq(users.id, userId));
+    // Delete related data first (cascade)
+    // Get user's wallets first to delete transactions
+    const userWallets = await this.getWalletsByUserId(userId);
+    const walletIds = userWallets.map(w => w.id);
+    
+    // Delete transactions for user's wallets
+    if (walletIds.length > 0) {
+      for (const walletId of walletIds) {
+        await db.delete(transactions).where(eq(transactions.walletId, walletId));
+      }
+    }
+    
+    // Delete spectator bets by user
+    await db.delete(spectatorBets).where(eq(spectatorBets.userId, userId));
+    
+    // Delete crypto payments by user
+    await db.delete(cryptoPayments).where(eq(cryptoPayments.userId, userId));
+    
+    // Delete wallets
+    await db.delete(wallets).where(eq(wallets.userId, userId));
+    
+    // Finally delete the user
+    await db.delete(users).where(eq(users.id, userId));
     return true;
   }
 
