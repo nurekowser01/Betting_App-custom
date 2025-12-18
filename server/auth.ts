@@ -39,7 +39,7 @@ export function setupAuth(app: Express) {
     session({
       store: new PgSession({
         pool,
-        createTableIfMissing: true,
+        createTableIfMissing: false,
       }),
       secret: process.env.SESSION_SECRET || "gamestake-secret-key",
       resave: false,
