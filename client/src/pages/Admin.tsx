@@ -254,8 +254,12 @@ export default function Admin() {
   const [newLinkUrl, setNewLinkUrl] = useState("");
 
   useEffect(() => {
-    if (quickLinks.length > 0 || !quickLinksLoading) {
-      setLocalQuickLinks(quickLinks);
+    if (!quickLinksLoading) {
+      const quickLinksStr = JSON.stringify(quickLinks);
+      const localStr = JSON.stringify(localQuickLinks);
+      if (quickLinksStr !== localStr) {
+        setLocalQuickLinks(quickLinks);
+      }
     }
   }, [quickLinks, quickLinksLoading]);
 
