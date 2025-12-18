@@ -1,4 +1,4 @@
-import { ArrowUpRight, ArrowDownLeft, Lock, Trophy, Gamepad2, RotateCcw } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, Lock, Trophy, Gamepad2, RotateCcw, Percent } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Transaction } from "@/lib/types";
 
@@ -6,13 +6,14 @@ interface TransactionListProps {
   transactions: Transaction[];
 }
 
-const typeConfig = {
+const typeConfig: Record<string, { icon: typeof ArrowDownLeft; color: string; label: string }> = {
   deposit: { icon: ArrowDownLeft, color: "text-chart-3", label: "Deposit" },
   withdrawal: { icon: ArrowUpRight, color: "text-chart-5", label: "Withdrawal" },
   bet: { icon: Gamepad2, color: "text-chart-1", label: "Bet" },
   winnings: { icon: Trophy, color: "text-chart-4", label: "Winnings" },
   escrow: { icon: Lock, color: "text-chart-2", label: "Escrow" },
   refund: { icon: RotateCcw, color: "text-chart-3", label: "Refund" },
+  platform_fee: { icon: Percent, color: "text-chart-4", label: "Platform Fee" },
 };
 
 export function TransactionList({ transactions }: TransactionListProps) {
