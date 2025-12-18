@@ -43,11 +43,11 @@ export async function registerRoutes(
       await storage.createWallet(user.id, "escrow");
       await storage.createWallet(user.id, "spectator");
 
-      req.login({ id: user.id, username: user.username }, (err) => {
+      req.login({ id: user.id, username: user.username, gamerUsername: user.gamerUsername }, (err) => {
         if (err) {
           return res.status(500).json({ message: "Login failed after registration" });
         }
-        res.json({ id: user.id, username: user.username });
+        res.json({ id: user.id, username: user.username, gamerUsername: user.gamerUsername });
       });
     } catch (error) {
       res.status(500).json({ message: "Registration failed" });
@@ -68,7 +68,7 @@ export async function registerRoutes(
           console.error("Session login error:", loginErr);
           return res.status(500).json({ message: "Login failed" });
         }
-        res.json({ id: user.id, username: user.username, isAdmin: user.isAdmin });
+        res.json({ id: user.id, username: user.username, gamerUsername: user.gamerUsername, isAdmin: user.isAdmin });
       });
     })(req, res, next);
   });

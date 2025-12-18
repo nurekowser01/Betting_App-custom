@@ -88,6 +88,7 @@ export async function setupReplitAuth(app: Express) {
     const dbUser = await upsertUser(tokens.claims());
     sessionUser.id = dbUser.id;
     sessionUser.username = dbUser.username;
+    sessionUser.gamerUsername = dbUser.gamerUsername;
     sessionUser.isAdmin = dbUser.isAdmin;
     verified(null, sessionUser);
   };

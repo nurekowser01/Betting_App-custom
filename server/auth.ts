@@ -18,6 +18,7 @@ declare global {
     interface User {
       id: string;
       username: string;
+      gamerUsername?: string | null;
       isAdmin?: number;
     }
   }
@@ -69,7 +70,7 @@ export function setupAuth(app: Express) {
         if (!isValid) {
           return done(null, false, { message: "Incorrect password" });
         }
-        return done(null, { id: user.id, username: user.username, isAdmin: user.isAdmin });
+        return done(null, { id: user.id, username: user.username, gamerUsername: user.gamerUsername, isAdmin: user.isAdmin });
       } catch (err) {
         return done(err);
       }
@@ -84,7 +85,7 @@ export function setupAuth(app: Express) {
     try {
       const user = await storage.getUser(id);
       if (user) {
-        done(null, { id: user.id, username: user.username, isAdmin: user.isAdmin });
+        done(null, { id: user.id, username: user.username, gamerUsername: user.gamerUsername, isAdmin: user.isAdmin });
       } else {
         done(null, false);
       }
