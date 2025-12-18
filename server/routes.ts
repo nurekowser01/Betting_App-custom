@@ -855,6 +855,178 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get all integrations
+  app.get("/api/admin/integrations", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const allIntegrations = await storage.getAllIntegrations();
+      
+      // Mask sensitive keys for display (show only last 4 chars)
+      const maskedIntegrations = allIntegrations.map(integration => ({
+        ...integration,
+        apiKey: integration.apiKey ? `****${integration.apiKey.slice(-4)}` : null,
+        secretKey: integration.secretKey ? `****${integration.secretKey.slice(-4)}` : null,
+        webhookSecret: integration.webhookSecret ? `****${integration.webhookSecret.slice(-4)}` : null,
+      }));
+      
+      res.json(maskedIntegrations);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch integrations" });
+    }
+  });
+
+  // Admin: Update integration settings
+  app.post("/api/admin/integrations/:type", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const validTypes = ['binance_pay', 'stripe', 'coinbase'] as const;
+      const integrationType = req.params.type as typeof validTypes[number];
+      
+      if (!validTypes.includes(integrationType)) {
+        return res.status(400).json({ message: "Invalid integration type" });
+      }
+
+      const schema = z.object({
+        enabled: z.number().int().min(0).max(1).optional(),
+        apiKey: z.string().optional(),
+        secretKey: z.string().optional(),
+        webhookSecret: z.string().optional(),
+        additionalConfig: z.any().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input" });
+      }
+
+      // Filter out empty strings
+      const data: any = {};
+      if (parsed.data.enabled !== undefined) data.enabled = parsed.data.enabled;
+      if (parsed.data.apiKey && parsed.data.apiKey.trim()) data.apiKey = parsed.data.apiKey.trim();
+      if (parsed.data.secretKey && parsed.data.secretKey.trim()) data.secretKey = parsed.data.secretKey.trim();
+      if (parsed.data.webhookSecret && parsed.data.webhookSecret.trim()) data.webhookSecret = parsed.data.webhookSecret.trim();
+      if (parsed.data.additionalConfig) data.additionalConfig = parsed.data.additionalConfig;
+
+      const integration = await storage.upsertIntegration(integrationType, data);
+      
+      // Mask the response
+      res.json({
+        ...integration,
+        apiKey: integration.apiKey ? `****${integration.apiKey.slice(-4)}` : null,
+        secretKey: integration.secretKey ? `****${integration.secretKey.slice(-4)}` : null,
+        webhookSecret: integration.webhookSecret ? `****${integration.webhookSecret.slice(-4)}` : null,
+      });
+    } catch (error) {
+      console.error("Error updating integration:", error);
+      res.status(500).json({ message: "Failed to update integration" });
+    }
+  });
+
+  // Admin: Test integration connection
+  app.post("/api/admin/integrations/:type/test", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const validTypes = ['binance_pay', 'stripe', 'coinbase'] as const;
+      const integrationType = req.params.type as typeof validTypes[number];
+      
+      if (!validTypes.includes(integrationType)) {
+        return res.status(400).json({ message: "Invalid integration type" });
+      }
+
+      const integration = await storage.getIntegration(integrationType);
+      if (!integration || !integration.apiKey || !integration.secretKey) {
+        return res.status(400).json({ message: "Integration not configured", success: false });
+      }
+
+      let testResult = { success: false, message: "" };
+
+      if (integrationType === 'binance_pay') {
+        try {
+          const cryptoModule = await import('crypto');
+          const timestamp = Date.now().toString();
+          const nonce = cryptoModule.randomBytes(16).toString('hex');
+          const requestBody = JSON.stringify({});
+          const payload = timestamp + "\n" + nonce + "\n" + requestBody + "\n";
+          const signature = cryptoModule.createHmac('sha512', integration.secretKey).update(payload).digest('hex').toUpperCase();
+          
+          const response = await fetch("https://bpay.binanceapi.com/binancepay/openapi/v2/certificates", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "BinancePay-Timestamp": timestamp,
+              "BinancePay-Nonce": nonce,
+              "BinancePay-Certificate-SN": integration.apiKey,
+              "BinancePay-Signature": signature,
+            },
+            body: requestBody,
+          });
+          
+          const data = await response.json();
+          if (data.status === "SUCCESS") {
+            testResult = { success: true, message: "Binance Pay connection successful" };
+          } else {
+            testResult = { success: false, message: data.errorMessage || "Connection failed" };
+          }
+        } catch (error: any) {
+          testResult = { success: false, message: error.message || "Connection test failed" };
+        }
+      } else if (integrationType === 'stripe') {
+        try {
+          const response = await fetch("https://api.stripe.com/v1/balance", {
+            headers: {
+              "Authorization": `Bearer ${integration.secretKey}`,
+            },
+          });
+          
+          if (response.ok) {
+            testResult = { success: true, message: "Stripe connection successful" };
+          } else {
+            const data = await response.json();
+            testResult = { success: false, message: data.error?.message || "Connection failed" };
+          }
+        } catch (error: any) {
+          testResult = { success: false, message: error.message || "Connection test failed" };
+        }
+      } else {
+        testResult = { success: false, message: "Test not implemented for this integration" };
+      }
+
+      // Update the test status
+      await storage.updateIntegrationTestStatus(integrationType, testResult.success ? "success" : "failed");
+      
+      res.json(testResult);
+    } catch (error) {
+      console.error("Error testing integration:", error);
+      res.status(500).json({ message: "Failed to test integration", success: false });
+    }
+  });
+
+  // Public: Get enabled payment methods
+  app.get("/api/payment-methods", async (req, res) => {
+    try {
+      const enabledIntegrations = await storage.getEnabledIntegrations();
+      const methods = enabledIntegrations.map(i => ({
+        type: i.type,
+        enabled: true,
+      }));
+      res.json(methods);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch payment methods" });
+    }
+  });
+
   // Crypto deposit routes using Binance Pay
   const crypto = await import('crypto');
   
