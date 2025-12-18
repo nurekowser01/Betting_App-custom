@@ -61,6 +61,9 @@ export interface IStorage {
   raiseDispute(matchId: string, userId: string, reason: string, evidence?: string): Promise<Match | undefined>;
   getDisputedMatches(): Promise<Match[]>;
   resolveDispute(matchId: string, adminId: string, winnerId: string, resolution: string): Promise<Match | undefined>;
+  
+  getMatchesReadyForSettlement(): Promise<Match[]>;
+  markSettlementExecuted(matchId: string): Promise<Match | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -258,6 +261,7 @@ export class DatabaseStorage implements IStorage {
     const [match] = await db.update(matches).set({
       winnerId,
       status: "completed",
+      approvedAt: new Date(),
     }).where(eq(matches.id, matchId)).returning();
     return match;
   }
@@ -459,6 +463,29 @@ export class DatabaseStorage implements IStorage {
       disputeResolvedById: adminId,
       disputeResolution: resolution,
       winnerId: winnerId,
+      approvedAt: new Date(),
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async getMatchesReadyForSettlement(): Promise<Match[]> {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const allCompleted = await db.select().from(matches).where(
+      and(
+        eq(matches.status, "completed"),
+        eq(matches.disputeStatus, "none")
+      )
+    );
+    return allCompleted.filter(match => 
+      match.approvedAt && 
+      match.approvedAt <= fiveMinutesAgo && 
+      !match.settlementExecutedAt
+    );
+  }
+
+  async markSettlementExecuted(matchId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      settlementExecutedAt: new Date(),
     }).where(eq(matches.id, matchId)).returning();
     return match;
   }

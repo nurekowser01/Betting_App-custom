@@ -541,7 +541,7 @@ export async function registerRoutes(
     }
   });
 
-  // Admin: Approve match and transfer funds
+  // Admin: Approve match (funds held for 5-minute dispute window)
   app.post("/api/admin/matches/:id/approve", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
@@ -564,61 +564,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid winner" });
       }
 
-      const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id;
-      const betAmount = parseFloat(match.betAmount);
-      const totalPot = betAmount * 2;
-      const adminFee = totalPot * 0.10; // 10% admin fee
-      const winnerPrize = totalPot - adminFee; // 90% goes to winner
-
-      // Transfer admin fee to platform wallet
-      const platformWallet = await storage.getPlatformWallet();
-      const newPlatformBalance = (parseFloat(platformWallet.balance) + adminFee).toFixed(2);
-      await storage.updateWalletBalance(platformWallet.id, newPlatformBalance);
-      await storage.createTransaction(platformWallet.userId, platformWallet.id, "platform_fee", adminFee.toFixed(2), `Fee from match: ${match.game}`);
-
-      // Update winner's wallets
-      const winnerEscrow = await storage.getWalletByUserAndType(winnerId, "escrow");
-      const winnerPersonal = await storage.getWalletByUserAndType(winnerId, "personal");
-
-      if (winnerEscrow && winnerPersonal) {
-        const newEscrowBalance = (parseFloat(winnerEscrow.balance) - betAmount).toFixed(2);
-        const newPersonalBalance = (parseFloat(winnerPersonal.balance) + winnerPrize).toFixed(2);
-        await storage.updateWalletBalance(winnerEscrow.id, newEscrowBalance);
-        await storage.updateWalletBalance(winnerPersonal.id, newPersonalBalance);
-        await storage.createTransaction(winnerId, winnerPersonal.id, "winnings", winnerPrize.toFixed(2), `Won match: ${match.game} (after 10% fee)`);
-      }
-
-      // Update loser's escrow
-      if (loserId) {
-        const loserEscrow = await storage.getWalletByUserAndType(loserId, "escrow");
-        if (loserEscrow) {
-          const newLoserEscrow = (parseFloat(loserEscrow.balance) - betAmount).toFixed(2);
-          await storage.updateWalletBalance(loserEscrow.id, newLoserEscrow);
-        }
-      }
-
-      // Process spectator bets - only process pending bets to avoid double payouts
-      const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
-      for (const bet of spectatorBets) {
-        // Skip if already processed
-        if (bet.status === "won" || bet.status === "lost") continue;
-        
-        const won = bet.predictedWinnerId === winnerId;
-        await storage.updateSpectatorBetStatus(bet.id, won ? "won" : "lost");
-
-        const spectatorWallet = await storage.getWalletByUserAndType(bet.userId, "spectator");
-        if (spectatorWallet) {
-          if (won) {
-            const winnings = parseFloat(bet.amount) * parseFloat(bet.oddsMultiplier);
-            const newBalance = (parseFloat(spectatorWallet.balance) + winnings).toFixed(2);
-            await storage.updateWalletBalance(spectatorWallet.id, newBalance);
-            await storage.createTransaction(bet.userId, spectatorWallet.id, "winnings", winnings.toFixed(2), `Won spectator bet on ${match.game}`);
-          }
-        }
-      }
-
+      // Just mark as approved - funds will be transferred after 5-minute dispute window
       const completedMatch = await storage.approveMatch(match.id, winnerId);
-      res.json(completedMatch);
+      res.json({ 
+        ...completedMatch, 
+        message: "Match approved. Funds will be transferred after 5-minute dispute window." 
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to approve match" });
     }
@@ -1610,6 +1561,99 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to fetch crypto payments" });
     }
   });
+
+  // Helper function to settle a single match (transfer funds)
+  async function settleMatch(match: any): Promise<boolean> {
+    try {
+      const winnerId = match.winnerId;
+      const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id;
+      const betAmount = parseFloat(match.betAmount);
+      const totalPot = betAmount * 2;
+      const adminFee = totalPot * 0.10;
+      const winnerPrize = totalPot - adminFee;
+
+      // Transfer admin fee to platform wallet
+      const platformWallet = await storage.getPlatformWallet();
+      const newPlatformBalance = (parseFloat(platformWallet.balance) + adminFee).toFixed(2);
+      await storage.updateWalletBalance(platformWallet.id, newPlatformBalance);
+      await storage.createTransaction(platformWallet.userId, platformWallet.id, "platform_fee", adminFee.toFixed(2), `Fee from match: ${match.game}`);
+
+      // Update winner's wallets
+      const winnerEscrow = await storage.getWalletByUserAndType(winnerId, "escrow");
+      const winnerPersonal = await storage.getWalletByUserAndType(winnerId, "personal");
+
+      if (winnerEscrow && winnerPersonal) {
+        const newEscrowBalance = (parseFloat(winnerEscrow.balance) - betAmount).toFixed(2);
+        const newPersonalBalance = (parseFloat(winnerPersonal.balance) + winnerPrize).toFixed(2);
+        await storage.updateWalletBalance(winnerEscrow.id, newEscrowBalance);
+        await storage.updateWalletBalance(winnerPersonal.id, newPersonalBalance);
+        await storage.createTransaction(winnerId, winnerPersonal.id, "winnings", winnerPrize.toFixed(2), `Won match: ${match.game} (after 10% fee)`);
+      }
+
+      // Update loser's escrow
+      if (loserId) {
+        const loserEscrow = await storage.getWalletByUserAndType(loserId, "escrow");
+        if (loserEscrow) {
+          const newLoserEscrow = (parseFloat(loserEscrow.balance) - betAmount).toFixed(2);
+          await storage.updateWalletBalance(loserEscrow.id, newLoserEscrow);
+        }
+      }
+
+      // Process spectator bets - only process pending bets to avoid double payouts
+      const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
+      for (const bet of spectatorBets) {
+        if (bet.status === "won" || bet.status === "lost") continue;
+        
+        const won = bet.predictedWinnerId === winnerId;
+        await storage.updateSpectatorBetStatus(bet.id, won ? "won" : "lost");
+
+        const spectatorWallet = await storage.getWalletByUserAndType(bet.userId, "spectator");
+        if (spectatorWallet && won) {
+          const winnings = parseFloat(bet.amount) * parseFloat(bet.oddsMultiplier);
+          const newBalance = (parseFloat(spectatorWallet.balance) + winnings).toFixed(2);
+          await storage.updateWalletBalance(spectatorWallet.id, newBalance);
+          await storage.createTransaction(bet.userId, spectatorWallet.id, "winnings", winnings.toFixed(2), `Won spectator bet on ${match.game}`);
+        }
+      }
+
+      // Mark settlement as executed
+      await storage.markSettlementExecuted(match.id);
+      return true;
+    } catch (error) {
+      console.error(`Failed to settle match ${match.id}:`, error);
+      return false;
+    }
+  }
+
+  // Process pending settlements (called periodically or on-demand)
+  app.post("/api/settlements/process", async (req, res) => {
+    try {
+      const matchesReady = await storage.getMatchesReadyForSettlement();
+      const results = [];
+
+      for (const match of matchesReady) {
+        const success = await settleMatch(match);
+        results.push({ matchId: match.id, settled: success });
+      }
+
+      res.json({ processed: results.length, results });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to process settlements" });
+    }
+  });
+
+  // Start settlement processing interval (check every 30 seconds)
+  setInterval(async () => {
+    try {
+      const matchesReady = await storage.getMatchesReadyForSettlement();
+      for (const match of matchesReady) {
+        await settleMatch(match);
+        console.log(`Auto-settled match ${match.id}`);
+      }
+    } catch (error) {
+      console.error("Settlement processing error:", error);
+    }
+  }, 30000);
 
   return httpServer;
 }

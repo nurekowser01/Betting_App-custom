@@ -36,6 +36,8 @@ export interface Match {
   disputeResolvedById?: string | null;
   disputeResolution?: string | null;
   createdAt: string;
+  approvedAt?: string | null;
+  settlementExecutedAt?: string | null;
   player1?: { id: string; username: string } | null;
   player2?: { id: string; username: string } | null;
   winner?: { id: string; username: string } | null;
