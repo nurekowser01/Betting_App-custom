@@ -11,6 +11,7 @@ import Admin from "@/pages/Admin";
 import Profile from "@/pages/Profile";
 import UserProfile from "@/pages/UserProfile";
 import TransactionHistory from "@/pages/TransactionHistory";
+import Leaderboard from "@/pages/Leaderboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/profile" component={Profile} />
       <Route path="/user/:id" component={UserProfile} />
       <Route path="/transactions" component={TransactionHistory} />
+      <Route path="/leaderboard" component={Leaderboard} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Gamepad2, Menu, User, LogOut, History, Wallet, LogIn, Shield } from "lucide-react";
+import { Gamepad2, Menu, User, LogOut, History, Wallet, LogIn, Shield, Trophy } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link } from "wouter";
 
@@ -20,6 +20,7 @@ export function Navbar({ username, balance = 0, isAdmin = false, onLogout, onLog
 
   const navLinks = [
     { label: "Matches", href: "/" },
+    { label: "Leaderboard", href: "/leaderboard" },
     ...(isAdmin ? [{ label: "Admin", href: "/admin" }] : []),
   ];
 

@@ -7,6 +7,21 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
+export interface PlayerStats {
+  userId: string;
+  username: string;
+  gamerUsername: string | null;
+  profileImageUrl: string | null;
+  wins: number;
+  losses: number;
+  totalMatches: number;
+  winRate: number;
+  totalEarnings: number;
+  totalBetAmount: number;
+  spectatorBetsWon: number;
+  spectatorBetsLost: number;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -18,6 +33,9 @@ export interface IStorage {
   updateGamerUsername(userId: string, gamerUsername: string): Promise<User | undefined>;
   suspendUser(userId: string, suspended: number): Promise<User | undefined>;
   deleteUser(userId: string): Promise<boolean>;
+  
+  getPlayerStats(userId: string): Promise<PlayerStats | undefined>;
+  getLeaderboard(limit?: number): Promise<PlayerStats[]>;
   
   getWalletsByUserId(userId: string): Promise<Wallet[]>;
   getWallet(id: string): Promise<Wallet | undefined>;
@@ -488,6 +506,74 @@ export class DatabaseStorage implements IStorage {
       settlementExecutedAt: new Date(),
     }).where(eq(matches.id, matchId)).returning();
     return match;
+  }
+
+  async getPlayerStats(userId: string): Promise<PlayerStats | undefined> {
+    const user = await this.getUser(userId);
+    if (!user) return undefined;
+
+    // Get all completed matches for this user
+    const userMatches = await db.select().from(matches).where(
+      and(
+        eq(matches.status, "completed"),
+        or(eq(matches.player1Id, userId), eq(matches.player2Id, userId))
+      )
+    );
+
+    let wins = 0;
+    let losses = 0;
+    let totalEarnings = 0;
+    let totalBetAmount = 0;
+
+    for (const match of userMatches) {
+      const betAmount = parseFloat(match.betAmount);
+      totalBetAmount += betAmount;
+
+      if (match.winnerId === userId) {
+        wins++;
+        const prize = betAmount * 2 * 0.9; // After 10% fee
+        totalEarnings += prize - betAmount; // Net profit
+      } else if (match.winnerId && match.winnerId !== userId) {
+        losses++;
+        totalEarnings -= betAmount;
+      }
+    }
+
+    // Get spectator bet stats
+    const userBets = await db.select().from(spectatorBets).where(eq(spectatorBets.userId, userId));
+    const spectatorBetsWon = userBets.filter(b => b.status === "won").length;
+    const spectatorBetsLost = userBets.filter(b => b.status === "lost").length;
+
+    return {
+      userId: user.id,
+      username: user.username,
+      gamerUsername: user.gamerUsername,
+      profileImageUrl: user.profileImageUrl,
+      wins,
+      losses,
+      totalMatches: wins + losses,
+      winRate: wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0,
+      totalEarnings,
+      totalBetAmount,
+      spectatorBetsWon,
+      spectatorBetsLost,
+    };
+  }
+
+  async getLeaderboard(limit: number = 50): Promise<PlayerStats[]> {
+    const allUsers = await db.select().from(users).where(eq(users.suspended, 0));
+    const statsPromises = allUsers.map(u => this.getPlayerStats(u.id));
+    const allStats = await Promise.all(statsPromises);
+    
+    return allStats
+      .filter((s): s is PlayerStats => s !== undefined && s.totalMatches > 0)
+      .sort((a, b) => {
+        // Sort by wins first, then by win rate, then by total earnings
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+        return b.totalEarnings - a.totalEarnings;
+      })
+      .slice(0, limit);
   }
 }
 

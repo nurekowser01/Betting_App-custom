@@ -175,6 +175,41 @@ export async function registerRoutes(
     }
   });
 
+  // Leaderboard and stats routes
+  app.get("/api/leaderboard", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const leaderboard = await storage.getLeaderboard(limit);
+      res.json(leaderboard);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/stats/:userId", async (req, res) => {
+    try {
+      const stats = await storage.getPlayerStats(req.params.userId);
+      if (!stats) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch player stats" });
+    }
+  });
+
+  app.get("/api/stats", requireAuth, async (req, res) => {
+    try {
+      const stats = await storage.getPlayerStats(req.user!.id);
+      if (!stats) {
+        return res.status(404).json({ message: "Stats not found" });
+      }
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
   // Match routes
   app.get("/api/matches", async (req, res) => {
     try {
