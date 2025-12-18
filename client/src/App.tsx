@@ -7,6 +7,8 @@ import { AuthProvider } from "@/lib/auth";
 import { useEffect } from "react";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
+import Profile from "@/pages/Profile";
+import TransactionHistory from "@/pages/TransactionHistory";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -14,6 +16,8 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/admin" component={Admin} />
+      <Route path="/profile" component={Profile} />
+      <Route path="/transactions" component={TransactionHistory} />
       <Route component={NotFound} />
     </Switch>
   );

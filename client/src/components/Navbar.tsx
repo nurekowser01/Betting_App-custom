@@ -73,14 +73,18 @@ export function Navbar({ username, balance = 0, isAdmin = false, onLogout, onLog
                     <p className="text-sm text-muted-foreground sm:hidden">${balance.toFixed(2)}</p>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem data-testid="menu-item-profile">
-                    <User className="h-4 w-4 mr-2" />
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem data-testid="menu-item-history">
-                    <History className="h-4 w-4 mr-2" />
-                    Transaction History
-                  </DropdownMenuItem>
+                  <Link href="/profile">
+                    <DropdownMenuItem data-testid="menu-item-profile">
+                      <User className="h-4 w-4 mr-2" />
+                      Profile
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/transactions">
+                    <DropdownMenuItem data-testid="menu-item-history">
+                      <History className="h-4 w-4 mr-2" />
+                      Transaction History
+                    </DropdownMenuItem>
+                  </Link>
                   {isAdmin && (
                     <>
                       <DropdownMenuSeparator />
