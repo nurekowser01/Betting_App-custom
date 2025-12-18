@@ -61,7 +61,7 @@ export async function registerRoutes(
           console.error("Session login error:", loginErr);
           return res.status(500).json({ message: "Login failed" });
         }
-        res.json({ id: user.id, username: user.username });
+        res.json({ id: user.id, username: user.username, isAdmin: user.isAdmin });
       });
     })(req, res, next);
   });
