@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,6 +13,7 @@ import { Link } from "wouter";
 export default function Admin() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [selectedWinners, setSelectedWinners] = useState<Record<string, string>>({});
 
   const { data: pendingMatches = [], isLoading } = useQuery<Match[]>({
     queryKey: ["/api/admin/matches/pending"],
@@ -23,9 +25,14 @@ export default function Admin() {
       const res = await apiRequest("POST", `/api/admin/matches/${matchId}/approve`, { winnerId });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matches/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      setSelectedWinners((prev) => {
+        const updated = { ...prev };
+        delete updated[variables.matchId];
+        return updated;
+      });
       toast({ title: "Match approved", description: "Funds have been transferred to the winner." });
     },
     onError: () => {
@@ -38,15 +45,31 @@ export default function Admin() {
       const res = await apiRequest("POST", `/api/admin/matches/${matchId}/reject`, {});
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, matchId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matches/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      setSelectedWinners((prev) => {
+        const updated = { ...prev };
+        delete updated[matchId];
+        return updated;
+      });
       toast({ title: "Match rejected", description: "Funds have been refunded to both players." });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to reject match", variant: "destructive" });
     },
   });
+
+  const selectWinner = (matchId: string, winnerId: string) => {
+    setSelectedWinners((prev) => ({ ...prev, [matchId]: winnerId }));
+  };
+
+  const handleConfirm = (matchId: string) => {
+    const winnerId = selectedWinners[matchId];
+    if (winnerId) {
+      approveMutation.mutate({ matchId, winnerId });
+    }
+  };
 
   if (!user || user.isAdmin !== 1) {
     return (
@@ -104,65 +127,82 @@ export default function Admin() {
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingMatches.map((match) => (
-                  <div
-                    key={match.id}
-                    data-testid={`card-pending-match-${match.id}`}
-                    className="p-4 border rounded-md bg-muted/30"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="font-medium">{match.game}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {match.player1?.username} vs {match.player2?.username}
-                        </div>
-                        <div className="text-sm">
-                          Bet: <span className="font-medium">${match.betAmount}</span> each (Total pot: ${parseFloat(match.betAmount) * 2})
-                        </div>
-                        {match.reportedWinner && (
-                          <div className="text-sm">
-                            Reported winner: <span className="font-medium text-primary">{match.reportedWinner.username}</span>
+                {pendingMatches.map((match) => {
+                  const selectedWinner = selectedWinners[match.id];
+                  const isPlayer1Selected = selectedWinner === match.player1Id;
+                  const isPlayer2Selected = selectedWinner === match.player2Id;
+
+                  return (
+                    <div
+                      key={match.id}
+                      data-testid={`card-pending-match-${match.id}`}
+                      className="p-4 border rounded-md bg-muted/30"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="font-medium">{match.game}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {match.player1?.username} vs {match.player2?.username}
                           </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <div className="text-sm text-muted-foreground mb-1">Approve winner:</div>
-                        <div className="flex gap-2 flex-wrap">
-                          <Button
-                            size="sm"
-                            onClick={() => approveMutation.mutate({ matchId: match.id, winnerId: match.player1Id })}
-                            disabled={approveMutation.isPending || rejectMutation.isPending}
-                            data-testid={`button-approve-player1-${match.id}`}
-                            variant={match.reportedWinnerId === match.player1Id ? "default" : "outline"}
-                          >
-                            <Check className="w-4 h-4 mr-1" />
-                            {match.player1?.username}
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => approveMutation.mutate({ matchId: match.id, winnerId: match.player2Id! })}
-                            disabled={approveMutation.isPending || rejectMutation.isPending || !match.player2Id}
-                            data-testid={`button-approve-player2-${match.id}`}
-                            variant={match.reportedWinnerId === match.player2Id ? "default" : "outline"}
-                          >
-                            <Check className="w-4 h-4 mr-1" />
-                            {match.player2?.username}
-                          </Button>
+                          <div className="text-sm">
+                            Bet: <span className="font-medium">${match.betAmount}</span> each (Total pot: ${parseFloat(match.betAmount) * 2})
+                          </div>
+                          {match.reportedWinner && (
+                            <div className="text-sm">
+                              Reported winner: <span className="font-medium text-primary">{match.reportedWinner.username}</span>
+                            </div>
+                          )}
                         </div>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => rejectMutation.mutate(match.id)}
-                          disabled={approveMutation.isPending || rejectMutation.isPending}
-                          data-testid={`button-reject-${match.id}`}
-                        >
-                          <X className="w-4 h-4 mr-1" />
-                          Reject & Refund Both
-                        </Button>
+                        <div className="flex flex-col gap-2">
+                          <div className="text-sm text-muted-foreground mb-1">Select winner:</div>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={() => selectWinner(match.id, match.player1Id)}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                              data-testid={`button-select-player1-${match.id}`}
+                              variant={isPlayer1Selected ? "default" : "outline"}
+                              className={isPlayer1Selected ? "ring-2 ring-primary ring-offset-2" : ""}
+                            >
+                              {match.player1?.username}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => selectWinner(match.id, match.player2Id!)}
+                              disabled={approveMutation.isPending || rejectMutation.isPending || !match.player2Id}
+                              data-testid={`button-select-player2-${match.id}`}
+                              variant={isPlayer2Selected ? "default" : "outline"}
+                              className={isPlayer2Selected ? "ring-2 ring-primary ring-offset-2" : ""}
+                            >
+                              {match.player2?.username}
+                            </Button>
+                          </div>
+                          <div className="flex gap-2 flex-wrap mt-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleConfirm(match.id)}
+                              disabled={!selectedWinner || approveMutation.isPending || rejectMutation.isPending}
+                              data-testid={`button-confirm-${match.id}`}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Confirm Winner
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => rejectMutation.mutate(match.id)}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                              data-testid={`button-reject-${match.id}`}
+                            >
+                              <X className="w-4 h-4 mr-1" />
+                              Reject & Refund
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
