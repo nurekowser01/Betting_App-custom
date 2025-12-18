@@ -9,6 +9,7 @@ import { CreateMatchDialog } from "@/components/CreateMatchDialog";
 import { DepositDialog } from "@/components/DepositDialog";
 import { SpectatorBetDialog } from "@/components/SpectatorBetDialog";
 import { CompleteMatchDialog } from "@/components/CompleteMatchDialog";
+import { DisputeDialog } from "@/components/DisputeDialog";
 import { TransactionList } from "@/components/TransactionList";
 import { AuthDialog } from "@/components/AuthDialog";
 import { Footer } from "@/components/Footer";
@@ -30,6 +31,7 @@ export default function Home() {
   const [depositType, setDepositType] = useState<'personal' | 'spectator'>('personal');
   const [spectatorBetOpen, setSpectatorBetOpen] = useState(false);
   const [completeMatchOpen, setCompleteMatchOpen] = useState(false);
+  const [disputeOpen, setDisputeOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   const { data: wallets = [], isLoading: walletsLoading } = useQuery<Wallet[]>({
@@ -249,6 +251,14 @@ export default function Home() {
     }
   };
 
+  const handleDispute = (matchId: string) => {
+    const match = matches.find(m => m.id === matchId);
+    if (match) {
+      setSelectedMatch(match);
+      setDisputeOpen(true);
+    }
+  };
+
   const openMatches = matches.filter(m => m.status === 'waiting');
   const liveMatches = matches.filter(m => m.status === 'live');
   const completedMatches = matches.filter(m => m.status === 'completed');
@@ -437,6 +447,11 @@ export default function Home() {
             onOpenChange={setCompleteMatchOpen}
             onComplete={handleConfirmWinner}
             isLoading={completeMatchMutation.isPending}
+          />
+          <DisputeDialog
+            match={selectedMatch}
+            open={disputeOpen}
+            onOpenChange={setDisputeOpen}
           />
         </>
       )}

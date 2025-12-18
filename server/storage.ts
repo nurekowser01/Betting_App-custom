@@ -57,6 +57,10 @@ export interface IStorage {
   upsertIntegration(type: 'binance_pay' | 'stripe' | 'coinbase', data: { enabled?: number; apiKey?: string; secretKey?: string; webhookSecret?: string; additionalConfig?: any }): Promise<Integration>;
   updateIntegrationTestStatus(type: 'binance_pay' | 'stripe' | 'coinbase', testStatus: string): Promise<Integration | undefined>;
   getEnabledIntegrations(): Promise<Integration[]>;
+  
+  raiseDispute(matchId: string, userId: string, reason: string, evidence?: string): Promise<Match | undefined>;
+  getDisputedMatches(): Promise<Match[]>;
+  resolveDispute(matchId: string, adminId: string, winnerId: string, resolution: string): Promise<Match | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -431,6 +435,32 @@ export class DatabaseStorage implements IStorage {
 
   async getEnabledIntegrations(): Promise<Integration[]> {
     return db.select().from(integrations).where(eq(integrations.enabled, 1));
+  }
+
+  async raiseDispute(matchId: string, userId: string, reason: string, evidence?: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      status: "disputed",
+      disputeStatus: "open",
+      disputeReason: reason,
+      disputeEvidence: evidence || null,
+      disputeRaisedById: userId,
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async getDisputedMatches(): Promise<Match[]> {
+    return db.select().from(matches).where(eq(matches.status, "disputed")).orderBy(desc(matches.createdAt));
+  }
+
+  async resolveDispute(matchId: string, adminId: string, winnerId: string, resolution: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      status: "completed",
+      disputeStatus: "resolved",
+      disputeResolvedById: adminId,
+      disputeResolution: resolution,
+      winnerId: winnerId,
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
   }
 }
 

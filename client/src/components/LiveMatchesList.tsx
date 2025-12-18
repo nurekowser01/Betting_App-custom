@@ -11,7 +11,7 @@ interface MatchForList {
   id: string;
   game: string;
   betAmount: string;
-  status: 'waiting' | 'live' | 'completed' | 'cancelled' | 'pending_approval';
+  status: 'waiting' | 'live' | 'completed' | 'cancelled' | 'pending_approval' | 'disputed';
   player1Id: string;
   player2Id?: string | null;
   winnerId?: string | null;
@@ -21,6 +21,7 @@ interface MatchForList {
   player1?: Player | null;
   player2?: Player | null;
   reportedWinner?: Player | null;
+  disputeStatus?: 'none' | 'open' | 'under_review' | 'resolved';
 }
 
 interface LiveMatchesListProps {

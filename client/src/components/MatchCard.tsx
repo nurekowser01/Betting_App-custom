@@ -18,6 +18,7 @@ interface MatchCardProps {
   onPropose?: (amount: number) => void;
   onAcceptProposal?: () => void;
   onRejectProposal?: () => void;
+  onDispute?: () => void;
   currentUserId?: string;
 }
 
@@ -27,6 +28,7 @@ const statusConfig = {
   completed: { label: "Completed", variant: "outline" as const },
   cancelled: { label: "Cancelled", variant: "outline" as const },
   pending_approval: { label: "Pending Approval", variant: "secondary" as const },
+  disputed: { label: "Disputed", variant: "destructive" as const },
 };
 
 export function MatchCard({ 
@@ -39,6 +41,7 @@ export function MatchCard({
   onPropose,
   onAcceptProposal,
   onRejectProposal,
+  onDispute,
   currentUserId 
 }: MatchCardProps) {
   const [showPropose, setShowPropose] = useState(false);
@@ -234,13 +237,25 @@ export function MatchCard({
             </Badge>
           )}
           {match.status === 'pending_approval' && isParticipant && (
-            <Badge variant="secondary" className="flex-1 justify-center py-2">
-              Awaiting Admin Approval
-            </Badge>
+            <>
+              <Badge variant="secondary" className="flex-1 justify-center py-2">
+                Awaiting Admin Approval
+              </Badge>
+              {match.disputeStatus === 'none' && (
+                <Button variant="destructive" size="sm" onClick={onDispute} data-testid="button-dispute-match">
+                  Dispute
+                </Button>
+              )}
+            </>
           )}
           {match.status === 'pending_approval' && !isParticipant && (
             <Badge variant="outline" className="flex-1 justify-center py-2">
               Pending Verification
+            </Badge>
+          )}
+          {match.status === 'disputed' && (
+            <Badge variant="destructive" className="flex-1 justify-center py-2">
+              Under Review
             </Badge>
           )}
         </div>

@@ -597,9 +597,12 @@ export async function registerRoutes(
         }
       }
 
-      // Process spectator bets
+      // Process spectator bets - only process pending bets to avoid double payouts
       const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
       for (const bet of spectatorBets) {
+        // Skip if already processed
+        if (bet.status === "won" || bet.status === "lost") continue;
+        
         const won = bet.predictedWinnerId === winnerId;
         await storage.updateSpectatorBetStatus(bet.id, won ? "won" : "lost");
 
@@ -682,6 +685,167 @@ export async function registerRoutes(
       res.json(cancelledMatch);
     } catch (error) {
       res.status(500).json({ message: "Failed to reject match" });
+    }
+  });
+
+  // Raise dispute on a match
+  app.post("/api/matches/:id/dispute", requireAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        reason: z.string().min(10, "Please provide a detailed reason"),
+        evidence: z.string().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const match = await storage.getMatch(req.params.id);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.player1Id !== req.user!.id && match.player2Id !== req.user!.id) {
+        return res.status(403).json({ message: "Only participants can raise a dispute" });
+      }
+
+      if (match.status !== "pending_approval" && match.status !== "completed") {
+        return res.status(400).json({ message: "Can only dispute matches that are pending approval or completed" });
+      }
+
+      if (match.disputeStatus !== "none") {
+        return res.status(400).json({ message: "This match already has a dispute" });
+      }
+
+      const disputedMatch = await storage.raiseDispute(match.id, req.user!.id, parsed.data.reason, parsed.data.evidence);
+      res.json(disputedMatch);
+    } catch (error) {
+      console.error("Failed to raise dispute:", error);
+      res.status(500).json({ message: "Failed to raise dispute" });
+    }
+  });
+
+  // Admin: Get disputed matches
+  app.get("/api/admin/matches/disputed", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const disputedMatches = await storage.getDisputedMatches();
+      
+      const enrichedMatches = await Promise.all(disputedMatches.map(async (match) => {
+        const player1 = await storage.getUser(match.player1Id);
+        const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
+        const raisedBy = match.disputeRaisedById ? await storage.getUser(match.disputeRaisedById) : null;
+        
+        return {
+          ...match,
+          player1: player1 ? { id: player1.id, username: player1.username } : null,
+          player2: player2 ? { id: player2.id, username: player2.username } : null,
+          disputeRaisedBy: raisedBy ? { id: raisedBy.id, username: raisedBy.username } : null,
+        };
+      }));
+
+      res.json(enrichedMatches);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch disputed matches" });
+    }
+  });
+
+  // Admin: Resolve dispute
+  app.post("/api/admin/matches/:id/resolve-dispute", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const schema = z.object({
+        winnerId: z.string(),
+        resolution: z.string().min(10, "Please provide a resolution explanation"),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+
+      const match = await storage.getMatch(req.params.id);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.status !== "disputed") {
+        return res.status(400).json({ message: "Match is not disputed" });
+      }
+
+      const { winnerId, resolution } = parsed.data;
+
+      if (winnerId !== match.player1Id && winnerId !== match.player2Id) {
+        return res.status(400).json({ message: "Winner must be one of the players" });
+      }
+
+      const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id;
+      if (!loserId) {
+        return res.status(400).json({ message: "Match doesn't have two players" });
+      }
+
+      const betAmount = parseFloat(match.betAmount);
+      const totalPot = betAmount * 2;
+      const platformFee = totalPot * 0.10;
+      const winnerPayout = totalPot - platformFee;
+
+      const winnerEscrow = await storage.getWalletByUserAndType(winnerId, "escrow");
+      const winnerPersonal = await storage.getWalletByUserAndType(winnerId, "personal");
+      const loserEscrow = await storage.getWalletByUserAndType(loserId, "escrow");
+      const platformWallet = await storage.getPlatformWallet();
+
+      if (!winnerEscrow || !winnerPersonal || !loserEscrow) {
+        return res.status(400).json({ message: "Wallets not found" });
+      }
+
+      // Transfer from both escrows
+      const newWinnerEscrow = (parseFloat(winnerEscrow.balance) - betAmount).toFixed(2);
+      const newLoserEscrow = (parseFloat(loserEscrow.balance) - betAmount).toFixed(2);
+      const newWinnerPersonal = (parseFloat(winnerPersonal.balance) + winnerPayout).toFixed(2);
+      const newPlatformBalance = (parseFloat(platformWallet.balance) + platformFee).toFixed(2);
+
+      await storage.updateWalletBalance(winnerEscrow.id, newWinnerEscrow);
+      await storage.updateWalletBalance(loserEscrow.id, newLoserEscrow);
+      await storage.updateWalletBalance(winnerPersonal.id, newWinnerPersonal);
+      await storage.updateWalletBalance(platformWallet.id, newPlatformBalance);
+
+      await storage.createTransaction(winnerId, winnerPersonal.id, "winnings", winnerPayout.toFixed(2), `Dispute resolved - Won: ${match.game}`);
+      await storage.createTransaction(platformWallet.userId, platformWallet.id, "platform_fee", platformFee.toFixed(2), `Dispute resolved - Platform fee: ${match.game}`);
+
+      // Handle spectator bets - only process pending bets to avoid double payouts
+      const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
+      for (const bet of spectatorBets) {
+        // Skip if already processed
+        if (bet.status === "won" || bet.status === "lost") continue;
+        
+        const spectatorWallet = await storage.getWalletByUserAndType(bet.userId, "spectator");
+        if (!spectatorWallet) continue;
+
+        if (bet.predictedWinnerId === winnerId) {
+          await storage.updateSpectatorBetStatus(bet.id, "won");
+          const payout = parseFloat(bet.amount) * parseFloat(bet.oddsMultiplier);
+          const newBalance = (parseFloat(spectatorWallet.balance) + payout).toFixed(2);
+          await storage.updateWalletBalance(spectatorWallet.id, newBalance);
+          await storage.createTransaction(bet.userId, spectatorWallet.id, "winnings", payout.toFixed(2), `Dispute resolved - Spectator bet won: ${match.game}`);
+        } else {
+          await storage.updateSpectatorBetStatus(bet.id, "lost");
+        }
+      }
+
+      const resolvedMatch = await storage.resolveDispute(match.id, req.user!.id, winnerId, resolution);
+      res.json(resolvedMatch);
+    } catch (error) {
+      console.error("Failed to resolve dispute:", error);
+      res.status(500).json({ message: "Failed to resolve dispute" });
     }
   });
 

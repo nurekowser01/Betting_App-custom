@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2, Ban, Trash2, UserCheck } from "lucide-react";
+import { Shield, Check, X, ArrowLeft, Users, Gamepad2, Clock, Eye, DollarSign, Settings, Zap, CheckCircle, XCircle, Loader2, Ban, Trash2, UserCheck, AlertTriangle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -53,6 +54,10 @@ interface PendingMatch extends Match {
   spectatorBetSummary?: SpectatorBetSummary;
 }
 
+interface DisputedMatch extends Match {
+  disputeRaisedBy?: { id: string; username: string } | null;
+}
+
 const adminLevelLabels: Record<number, string> = {
   0: "User",
   1: "Admin",
@@ -86,6 +91,13 @@ export default function Admin() {
     queryKey: ["/api/admin/users"],
     enabled: isSuperAdmin,
   });
+
+  const { data: disputedMatches = [], isLoading: disputedLoading } = useQuery<DisputedMatch[]>({
+    queryKey: ["/api/admin/matches/disputed"],
+    enabled: user?.isAdmin !== undefined && user.isAdmin >= 1,
+  });
+
+  const [disputeResolutions, setDisputeResolutions] = useState<Record<string, { winnerId: string; resolution: string }>>({});
 
   const approveMutation = useMutation({
     mutationFn: async ({ matchId, winnerId }: { matchId: string; winnerId: string }) => {
@@ -169,6 +181,26 @@ export default function Admin() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to delete user", variant: "destructive" });
+    },
+  });
+
+  const resolveDisputeMutation = useMutation({
+    mutationFn: async ({ matchId, winnerId, resolution }: { matchId: string; winnerId: string; resolution: string }) => {
+      const res = await apiRequest("POST", `/api/admin/matches/${matchId}/resolve-dispute`, { winnerId, resolution });
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/matches/disputed"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      setDisputeResolutions((prev) => {
+        const updated = { ...prev };
+        delete updated[variables.matchId];
+        return updated;
+      });
+      toast({ title: "Dispute Resolved", description: "The dispute has been resolved and funds transferred." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to resolve dispute", variant: "destructive" });
     },
   });
 
@@ -314,6 +346,10 @@ export default function Admin() {
             <TabsTrigger value="live" className="gap-2" data-testid="tab-live">
               <Gamepad2 className="h-4 w-4" />
               Live ({liveMatches.length})
+            </TabsTrigger>
+            <TabsTrigger value="disputes" className="gap-2" data-testid="tab-disputes">
+              <AlertTriangle className="h-4 w-4" />
+              Disputes ({disputedMatches.length})
             </TabsTrigger>
             {isSuperAdmin && (
               <TabsTrigger value="users" className="gap-2" data-testid="tab-users">
@@ -543,6 +579,145 @@ export default function Admin() {
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="disputes">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  Disputed Matches
+                  {disputedMatches.length > 0 && (
+                    <Badge variant="destructive">{disputedMatches.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {disputedLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                ) : disputedMatches.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No disputed matches
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {disputedMatches.map((match) => {
+                      const resolution = disputeResolutions[match.id] || { winnerId: '', resolution: '' };
+                      
+                      return (
+                        <div
+                          key={match.id}
+                          data-testid={`card-disputed-match-${match.id}`}
+                          className="p-4 border rounded-md bg-destructive/5 border-destructive/20"
+                        >
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                                  <span className="font-medium">{match.game}</span>
+                                  <Badge variant="destructive">Disputed</Badge>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {match.player1?.username} vs {match.player2?.username}
+                                </div>
+                                <div className="text-sm">
+                                  Bet: <span className="font-medium">${match.betAmount}</span> each (Total pot: ${parseFloat(match.betAmount) * 2})
+                                </div>
+                                {match.disputeRaisedBy && (
+                                  <div className="text-sm">
+                                    Dispute raised by: <span className="font-medium text-destructive">{match.disputeRaisedBy.username}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="p-3 rounded-md bg-muted/50">
+                              <div className="text-sm font-medium mb-2">Dispute Reason:</div>
+                              <p className="text-sm text-muted-foreground">{match.disputeReason || "No reason provided"}</p>
+                              {match.disputeEvidence && (
+                                <>
+                                  <div className="text-sm font-medium mt-3 mb-2">Evidence:</div>
+                                  <p className="text-sm text-muted-foreground">{match.disputeEvidence}</p>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="space-y-3 pt-3 border-t">
+                              <div className="text-sm font-medium">Resolve Dispute:</div>
+                              
+                              <div className="flex flex-wrap gap-2">
+                                <Label className="text-sm text-muted-foreground">Select Winner:</Label>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={resolution.winnerId === match.player1Id ? "default" : "outline"}
+                                    onClick={() => setDisputeResolutions(prev => ({
+                                      ...prev,
+                                      [match.id]: { ...resolution, winnerId: match.player1Id }
+                                    }))}
+                                    data-testid={`button-select-player1-${match.id}`}
+                                  >
+                                    {match.player1?.username}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={resolution.winnerId === match.player2Id ? "default" : "outline"}
+                                    onClick={() => setDisputeResolutions(prev => ({
+                                      ...prev,
+                                      [match.id]: { ...resolution, winnerId: match.player2Id! }
+                                    }))}
+                                    data-testid={`button-select-player2-${match.id}`}
+                                  >
+                                    {match.player2?.username}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div>
+                                <Label className="text-sm text-muted-foreground">Resolution Explanation (required):</Label>
+                                <Textarea
+                                  placeholder="Explain the resolution decision..."
+                                  value={resolution.resolution}
+                                  onChange={(e) => setDisputeResolutions(prev => ({
+                                    ...prev,
+                                    [match.id]: { ...resolution, resolution: e.target.value }
+                                  }))}
+                                  className="mt-1"
+                                  data-testid={`input-resolution-${match.id}`}
+                                />
+                              </div>
+
+                              <Button
+                                onClick={() => resolveDisputeMutation.mutate({
+                                  matchId: match.id,
+                                  winnerId: resolution.winnerId,
+                                  resolution: resolution.resolution
+                                })}
+                                disabled={!resolution.winnerId || resolution.resolution.length < 10 || resolveDisputeMutation.isPending}
+                                data-testid={`button-resolve-${match.id}`}
+                              >
+                                {resolveDisputeMutation.isPending ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Resolving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="h-4 w-4 mr-2" />
+                                    Resolve Dispute
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

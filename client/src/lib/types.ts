@@ -14,7 +14,8 @@ export interface Wallet {
   balance: string;
 }
 
-export type MatchStatus = 'waiting' | 'live' | 'completed' | 'cancelled' | 'pending_approval';
+export type MatchStatus = 'waiting' | 'live' | 'completed' | 'cancelled' | 'pending_approval' | 'disputed';
+export type DisputeStatus = 'none' | 'open' | 'under_review' | 'resolved';
 
 export interface Match {
   id: string;
@@ -28,12 +29,19 @@ export interface Match {
   spectatorCount: number;
   proposedAmount?: string | null;
   proposedByUserId?: string | null;
+  disputeStatus?: DisputeStatus;
+  disputeReason?: string | null;
+  disputeEvidence?: string | null;
+  disputeRaisedById?: string | null;
+  disputeResolvedById?: string | null;
+  disputeResolution?: string | null;
   createdAt: string;
   player1?: { id: string; username: string } | null;
   player2?: { id: string; username: string } | null;
   winner?: { id: string; username: string } | null;
   reportedWinner?: { id: string; username: string } | null;
   proposedBy?: { id: string; username: string } | null;
+  disputeRaisedBy?: { id: string; username: string } | null;
 }
 
 export interface SpectatorBet {
