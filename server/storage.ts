@@ -14,8 +14,9 @@ export interface IStorage {
   
   getWalletsByUserId(userId: string): Promise<Wallet[]>;
   getWallet(id: string): Promise<Wallet | undefined>;
-  getWalletByUserAndType(userId: string, type: 'personal' | 'escrow' | 'spectator'): Promise<Wallet | undefined>;
-  createWallet(userId: string, type: 'personal' | 'escrow' | 'spectator'): Promise<Wallet>;
+  getWalletByUserAndType(userId: string, type: 'personal' | 'escrow' | 'spectator' | 'platform'): Promise<Wallet | undefined>;
+  createWallet(userId: string, type: 'personal' | 'escrow' | 'spectator' | 'platform'): Promise<Wallet>;
+  getPlatformWallet(): Promise<Wallet>;
   updateWalletBalance(id: string, newBalance: string): Promise<Wallet | undefined>;
   
   getMatches(): Promise<Match[]>;
@@ -35,7 +36,7 @@ export interface IStorage {
   updateSpectatorBetStatus(id: string, status: 'won' | 'lost'): Promise<void>;
   
   getTransactionsByUserId(userId: string): Promise<Transaction[]>;
-  createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund', amount: string, description: string): Promise<Transaction>;
+  createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee', amount: string, description: string): Promise<Transaction>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -63,16 +64,31 @@ export class DatabaseStorage implements IStorage {
     return wallet;
   }
 
-  async getWalletByUserAndType(userId: string, type: 'personal' | 'escrow' | 'spectator'): Promise<Wallet | undefined> {
+  async getWalletByUserAndType(userId: string, type: 'personal' | 'escrow' | 'spectator' | 'platform'): Promise<Wallet | undefined> {
     const [wallet] = await db.select().from(wallets).where(
       and(eq(wallets.userId, userId), eq(wallets.type, type))
     );
     return wallet;
   }
 
-  async createWallet(userId: string, type: 'personal' | 'escrow' | 'spectator'): Promise<Wallet> {
+  async createWallet(userId: string, type: 'personal' | 'escrow' | 'spectator' | 'platform'): Promise<Wallet> {
     const [wallet] = await db.insert(wallets).values({ userId, type, balance: "0" }).returning();
     return wallet;
+  }
+
+  async getPlatformWallet(): Promise<Wallet> {
+    // Get the first admin user's platform wallet, or create one
+    const [adminUser] = await db.select().from(users).where(eq(users.isAdmin, 1)).limit(1);
+    
+    if (!adminUser) {
+      throw new Error("No admin user found for platform wallet");
+    }
+
+    let platformWallet = await this.getWalletByUserAndType(adminUser.id, "platform");
+    if (!platformWallet) {
+      platformWallet = await this.createWallet(adminUser.id, "platform");
+    }
+    return platformWallet;
   }
 
   async updateWalletBalance(id: string, newBalance: string): Promise<Wallet | undefined> {
@@ -181,7 +197,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(transactions).where(eq(transactions.userId, userId)).orderBy(desc(transactions.createdAt));
   }
 
-  async createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund', amount: string, description: string): Promise<Transaction> {
+  async createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee', amount: string, description: string): Promise<Transaction> {
     const [tx] = await db.insert(transactions).values({
       userId,
       walletId,

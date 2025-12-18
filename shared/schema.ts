@@ -3,9 +3,9 @@ import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum } from "dri
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const walletTypeEnum = pgEnum('wallet_type', ['personal', 'escrow', 'spectator']);
+export const walletTypeEnum = pgEnum('wallet_type', ['personal', 'escrow', 'spectator', 'platform']);
 export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pending_approval', 'completed', 'cancelled']);
-export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund']);
+export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund', 'platform_fee']);
 export const betStatusEnum = pgEnum('bet_status', ['pending', 'won', 'lost']);
 
 export const users = pgTable("users", {

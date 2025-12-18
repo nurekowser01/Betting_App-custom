@@ -346,7 +346,15 @@ export async function registerRoutes(
 
       const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id;
       const betAmount = parseFloat(match.betAmount);
-      const totalPrize = betAmount * 2;
+      const totalPot = betAmount * 2;
+      const adminFee = totalPot * 0.10; // 10% admin fee
+      const winnerPrize = totalPot - adminFee; // 90% goes to winner
+
+      // Transfer admin fee to platform wallet
+      const platformWallet = await storage.getPlatformWallet();
+      const newPlatformBalance = (parseFloat(platformWallet.balance) + adminFee).toFixed(2);
+      await storage.updateWalletBalance(platformWallet.id, newPlatformBalance);
+      await storage.createTransaction(platformWallet.userId, platformWallet.id, "platform_fee", adminFee.toFixed(2), `Fee from match: ${match.game}`);
 
       // Update winner's wallets
       const winnerEscrow = await storage.getWalletByUserAndType(winnerId, "escrow");
@@ -354,10 +362,10 @@ export async function registerRoutes(
 
       if (winnerEscrow && winnerPersonal) {
         const newEscrowBalance = (parseFloat(winnerEscrow.balance) - betAmount).toFixed(2);
-        const newPersonalBalance = (parseFloat(winnerPersonal.balance) + totalPrize).toFixed(2);
+        const newPersonalBalance = (parseFloat(winnerPersonal.balance) + winnerPrize).toFixed(2);
         await storage.updateWalletBalance(winnerEscrow.id, newEscrowBalance);
         await storage.updateWalletBalance(winnerPersonal.id, newPersonalBalance);
-        await storage.createTransaction(winnerId, winnerPersonal.id, "winnings", totalPrize.toFixed(2), `Won match: ${match.game}`);
+        await storage.createTransaction(winnerId, winnerPersonal.id, "winnings", winnerPrize.toFixed(2), `Won match: ${match.game} (after 10% fee)`);
       }
 
       // Update loser's escrow
