@@ -21,8 +21,11 @@ export interface IStorage {
   getMatches(): Promise<Match[]>;
   getMatch(id: string): Promise<Match | undefined>;
   getMatchesByUserId(userId: string): Promise<Match[]>;
+  getPendingApprovalMatches(): Promise<Match[]>;
   createMatch(game: string, betAmount: string, player1Id: string): Promise<Match>;
   joinMatch(matchId: string, player2Id: string): Promise<Match | undefined>;
+  reportMatchWinner(matchId: string, reportedWinnerId: string): Promise<Match | undefined>;
+  approveMatch(matchId: string, winnerId: string): Promise<Match | undefined>;
   completeMatch(matchId: string, winnerId: string): Promise<Match | undefined>;
   updateMatchSpectatorCount(matchId: string, count: number): Promise<void>;
   
@@ -107,6 +110,26 @@ export class DatabaseStorage implements IStorage {
     const [match] = await db.update(matches).set({
       player2Id,
       status: "live",
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async getPendingApprovalMatches(): Promise<Match[]> {
+    return db.select().from(matches).where(eq(matches.status, "pending_approval")).orderBy(desc(matches.createdAt));
+  }
+
+  async reportMatchWinner(matchId: string, reportedWinnerId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      reportedWinnerId,
+      status: "pending_approval",
+    }).where(eq(matches.id, matchId)).returning();
+    return match;
+  }
+
+  async approveMatch(matchId: string, winnerId: string): Promise<Match | undefined> {
+    const [match] = await db.update(matches).set({
+      winnerId,
+      status: "completed",
     }).where(eq(matches.id, matchId)).returning();
     return match;
   }

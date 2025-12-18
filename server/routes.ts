@@ -262,6 +262,7 @@ export async function registerRoutes(
     }
   });
 
+  // Player reports winner - sets match to pending_approval
   app.post("/api/matches/:id/complete", requireAuth, async (req, res) => {
     try {
       const { winnerId } = req.body;
@@ -277,6 +278,66 @@ export async function registerRoutes(
 
       if (match.player1Id !== req.user!.id && match.player2Id !== req.user!.id) {
         return res.status(403).json({ message: "You are not a participant" });
+      }
+
+      if (winnerId !== match.player1Id && winnerId !== match.player2Id) {
+        return res.status(400).json({ message: "Invalid winner" });
+      }
+
+      // Set to pending_approval - admin will approve and transfer funds
+      const updatedMatch = await storage.reportMatchWinner(match.id, winnerId);
+      res.json(updatedMatch);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to report winner" });
+    }
+  });
+
+  // Admin: Get pending approval matches
+  app.get("/api/admin/matches/pending", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin !== 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const pendingMatches = await storage.getPendingApprovalMatches();
+      
+      // Enrich with player info
+      const enrichedMatches = await Promise.all(pendingMatches.map(async (match) => {
+        const player1 = await storage.getUser(match.player1Id);
+        const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
+        const reportedWinner = match.reportedWinnerId ? await storage.getUser(match.reportedWinnerId) : null;
+        return {
+          ...match,
+          player1: player1 ? { id: player1.id, username: player1.username } : null,
+          player2: player2 ? { id: player2.id, username: player2.username } : null,
+          reportedWinner: reportedWinner ? { id: reportedWinner.id, username: reportedWinner.username } : null,
+        };
+      }));
+
+      res.json(enrichedMatches);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch pending matches" });
+    }
+  });
+
+  // Admin: Approve match and transfer funds
+  app.post("/api/admin/matches/:id/approve", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin !== 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { winnerId } = req.body;
+      const match = await storage.getMatch(req.params.id);
+
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      if (match.status !== "pending_approval") {
+        return res.status(400).json({ message: "Match is not pending approval" });
       }
 
       if (winnerId !== match.player1Id && winnerId !== match.player2Id) {
@@ -325,10 +386,10 @@ export async function registerRoutes(
         }
       }
 
-      const completedMatch = await storage.completeMatch(match.id, winnerId);
+      const completedMatch = await storage.approveMatch(match.id, winnerId);
       res.json(completedMatch);
     } catch (error) {
-      res.status(500).json({ message: "Failed to complete match" });
+      res.status(500).json({ message: "Failed to approve match" });
     }
   });
 
