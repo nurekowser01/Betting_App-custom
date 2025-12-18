@@ -1576,9 +1576,24 @@ export async function registerRoutes(
   });
 
   // Helper function to settle a single match (transfer funds)
-  async function settleMatch(match: any): Promise<boolean> {
+  async function settleMatch(matchId: string): Promise<boolean> {
     try {
+      // Re-fetch match to get current state (prevents race conditions)
+      const match = await storage.getMatch(matchId);
+      if (!match) return false;
+
+      // Final safety checks before settlement
+      if (match.status !== "completed") return false;
+      if (match.disputeStatus !== "none") return false;
+      if (match.settlementExecutedAt) return false;
+      if (!match.approvedAt) return false;
+      
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (new Date(match.approvedAt) > fiveMinutesAgo) return false; // Window not yet expired
+
       const winnerId = match.winnerId;
+      if (!winnerId) return false;
+      
       const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id;
       const betAmount = parseFloat(match.betAmount);
       const totalPot = betAmount * 2;
@@ -1633,19 +1648,24 @@ export async function registerRoutes(
       await storage.markSettlementExecuted(match.id);
       return true;
     } catch (error) {
-      console.error(`Failed to settle match ${match.id}:`, error);
+      console.error(`Failed to settle match ${matchId}:`, error);
       return false;
     }
   }
 
-  // Process pending settlements (called periodically or on-demand)
-  app.post("/api/settlements/process", async (req, res) => {
+  // Process pending settlements (admin only endpoint for manual trigger)
+  app.post("/api/settlements/process", requireAuth, async (req, res) => {
     try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
       const matchesReady = await storage.getMatchesReadyForSettlement();
       const results = [];
 
       for (const match of matchesReady) {
-        const success = await settleMatch(match);
+        const success = await settleMatch(match.id);
         results.push({ matchId: match.id, settled: success });
       }
 
@@ -1660,8 +1680,10 @@ export async function registerRoutes(
     try {
       const matchesReady = await storage.getMatchesReadyForSettlement();
       for (const match of matchesReady) {
-        await settleMatch(match);
-        console.log(`Auto-settled match ${match.id}`);
+        const success = await settleMatch(match.id);
+        if (success) {
+          console.log(`Auto-settled match ${match.id}`);
+        }
       }
     } catch (error) {
       console.error("Settlement processing error:", error);

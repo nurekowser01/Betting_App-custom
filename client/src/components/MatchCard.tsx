@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Eye, Trophy, Gamepad2, X, Check, DollarSign } from "lucide-react";
+import { Eye, Trophy, Gamepad2, X, Check, DollarSign, Clock } from "lucide-react";
 import type { Match } from "@/lib/types";
 
 interface MatchCardProps {
@@ -46,12 +46,45 @@ export function MatchCard({
 }: MatchCardProps) {
   const [showPropose, setShowPropose] = useState(false);
   const [proposedAmount, setProposedAmount] = useState(match.betAmount);
+  const [disputeWindowRemaining, setDisputeWindowRemaining] = useState<number | null>(null);
   
   const status = statusConfig[match.status];
   const betAmount = parseFloat(match.betAmount);
   const isParticipant = currentUserId && (match.player1Id === currentUserId || match.player2Id === currentUserId);
   const isCreator = currentUserId === match.player1Id;
   const hasProposal = match.proposedAmount && match.proposedByUserId;
+
+  // Calculate dispute window remaining time
+  useEffect(() => {
+    if (match.status !== 'completed' || !match.approvedAt || match.settlementExecutedAt) {
+      setDisputeWindowRemaining(null);
+      return;
+    }
+
+    const calculateRemaining = () => {
+      const approvedTime = new Date(match.approvedAt!).getTime();
+      const windowEnd = approvedTime + 5 * 60 * 1000; // 5 minutes
+      const now = Date.now();
+      const remaining = Math.max(0, windowEnd - now);
+      setDisputeWindowRemaining(remaining);
+    };
+
+    calculateRemaining();
+    const interval = setInterval(calculateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [match.approvedAt, match.status, match.settlementExecutedAt]);
+
+  const canDispute = isParticipant && 
+    match.disputeStatus === 'none' && 
+    !match.settlementExecutedAt &&
+    disputeWindowRemaining !== null && 
+    disputeWindowRemaining > 0;
+
+  const formatTime = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   const handlePropose = () => {
     const amount = parseFloat(proposedAmount);
@@ -220,10 +253,16 @@ export function MatchCard({
               <Button className="flex-1" variant="secondary" onClick={onViewResults} data-testid="button-view-results">
                 View Results
               </Button>
-              {isParticipant && match.disputeStatus === 'none' && (
+              {canDispute && (
                 <Button variant="destructive" size="sm" onClick={onDispute} data-testid="button-dispute-completed">
-                  Dispute
+                  <Clock className="h-3 w-3 mr-1" />
+                  Dispute ({formatTime(disputeWindowRemaining!)})
                 </Button>
+              )}
+              {match.settlementExecutedAt && (
+                <Badge variant="outline" className="text-xs">
+                  Settled
+                </Badge>
               )}
             </>
           )}
