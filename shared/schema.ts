@@ -111,6 +111,15 @@ export const integrations = pgTable("integrations", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const quickLinks = pgTable("quick_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  icon: text("icon").notNull().default("link"),
+  displayOrder: integer("display_order").notNull().default(0),
+  isVisible: integer("is_visible").notNull().default(1),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -159,7 +168,17 @@ export const insertIntegrationSchema = createInsertSchema(integrations).omit({
   updatedAt: true,
 });
 
+export const insertQuickLinkSchema = createInsertSchema(quickLinks).omit({
+  id: true,
+});
+
+export const updateQuickLinkSchema = createInsertSchema(quickLinks).omit({
+  id: true,
+}).partial();
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertQuickLink = z.infer<typeof insertQuickLinkSchema>;
+export type QuickLink = typeof quickLinks.$inferSelect;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
 export type User = typeof users.$inferSelect;

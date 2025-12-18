@@ -1,9 +1,9 @@
 import { db } from "./db";
-import { eq, and, desc, or, gte } from "drizzle-orm";
+import { eq, and, desc, or, gte, asc } from "drizzle-orm";
 import { 
-  users, wallets, matches, spectatorBets, transactions, cryptoPayments, integrations,
-  type User, type Wallet, type Match, type SpectatorBet, type Transaction, type CryptoPayment, type Integration,
-  type InsertUser, type UpsertUser
+  users, wallets, matches, spectatorBets, transactions, cryptoPayments, integrations, quickLinks,
+  type User, type Wallet, type Match, type SpectatorBet, type Transaction, type CryptoPayment, type Integration, type QuickLink,
+  type InsertUser, type UpsertUser, type InsertQuickLink
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -82,6 +82,14 @@ export interface IStorage {
   
   getMatchesReadyForSettlement(): Promise<Match[]>;
   markSettlementExecuted(matchId: string): Promise<Match | undefined>;
+  
+  getAllQuickLinks(): Promise<QuickLink[]>;
+  getVisibleQuickLinks(): Promise<QuickLink[]>;
+  getQuickLink(id: string): Promise<QuickLink | undefined>;
+  createQuickLink(data: InsertQuickLink): Promise<QuickLink>;
+  updateQuickLink(id: string, data: Partial<InsertQuickLink>): Promise<QuickLink | undefined>;
+  deleteQuickLink(id: string): Promise<boolean>;
+  reorderQuickLinks(orderedIds: string[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -574,6 +582,48 @@ export class DatabaseStorage implements IStorage {
         return b.totalEarnings - a.totalEarnings;
       })
       .slice(0, limit);
+  }
+
+  async getAllQuickLinks(): Promise<QuickLink[]> {
+    return db.select().from(quickLinks).orderBy(asc(quickLinks.displayOrder));
+  }
+
+  async getVisibleQuickLinks(): Promise<QuickLink[]> {
+    return db.select().from(quickLinks)
+      .where(eq(quickLinks.isVisible, 1))
+      .orderBy(asc(quickLinks.displayOrder));
+  }
+
+  async getQuickLink(id: string): Promise<QuickLink | undefined> {
+    const [link] = await db.select().from(quickLinks).where(eq(quickLinks.id, id));
+    return link;
+  }
+
+  async createQuickLink(data: InsertQuickLink): Promise<QuickLink> {
+    const allLinks = await this.getAllQuickLinks();
+    const maxOrder = allLinks.length > 0 ? Math.max(...allLinks.map(l => l.displayOrder)) : -1;
+    
+    const [link] = await db.insert(quickLinks).values({
+      ...data,
+      displayOrder: maxOrder + 1,
+    }).returning();
+    return link;
+  }
+
+  async updateQuickLink(id: string, data: Partial<InsertQuickLink>): Promise<QuickLink | undefined> {
+    const [link] = await db.update(quickLinks).set(data).where(eq(quickLinks.id, id)).returning();
+    return link;
+  }
+
+  async deleteQuickLink(id: string): Promise<boolean> {
+    const result = await db.delete(quickLinks).where(eq(quickLinks.id, id));
+    return true;
+  }
+
+  async reorderQuickLinks(orderedIds: string[]): Promise<void> {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.update(quickLinks).set({ displayOrder: i }).where(eq(quickLinks.id, orderedIds[i]));
+    }
   }
 }
 
