@@ -32,16 +32,20 @@ Preferred communication style: Simple, everyday language.
 - **Migrations**: Drizzle Kit with `db:push` command
 
 ### Key Data Models
-- **Users**: Basic auth with username/password
-- **Wallets**: Three types per user (personal, escrow, spectator) with decimal balance
-- **Matches**: Game matches with status lifecycle (waiting → live → completed/cancelled)
+- **Users**: Dual auth with username/password and Google OAuth, optional email and profile image
+- **Wallets**: Four types (personal, escrow, spectator, platform) with decimal balance
+- **Matches**: Game matches with status lifecycle (waiting → live → pending_approval → completed/cancelled)
 - **Spectator Bets**: Side bets on live matches with odds multiplier
 - **Transactions**: Full audit trail of all wallet movements
 
 ### Authentication Flow
-- Session-based authentication stored in PostgreSQL
+- **Dual authentication system**: Username/password (local) and Google OAuth (via Replit Auth)
+- Session-based authentication stored in PostgreSQL (`sessions` table)
+- Local auth uses Passport.js LocalStrategy with bcrypt password hashing
+- OAuth uses Replit Auth with OpenID Connect (supports Google, GitHub, Apple, etc.)
 - Protected routes use `requireAuth` middleware
 - User context provided via React Context on frontend
+- Registration advises users to use their PlayStation (PSN) or Xbox Gamertag for easy identification
 
 ### Build & Deployment
 - **Development**: `npm run dev` runs Vite dev server with HMR proxied through Express
