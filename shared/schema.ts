@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const walletTypeEnum = pgEnum('wallet_type', ['personal', 'escrow', 'spectator']);
-export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'completed', 'cancelled']);
+export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pending_approval', 'completed', 'cancelled']);
 export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund']);
 export const betStatusEnum = pgEnum('bet_status', ['pending', 'won', 'lost']);
 
@@ -12,6 +12,7 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  isAdmin: integer("is_admin").notNull().default(0),
 });
 
 export const wallets = pgTable("wallets", {
@@ -28,6 +29,7 @@ export const matches = pgTable("matches", {
   status: matchStatusEnum("status").notNull().default("waiting"),
   player1Id: varchar("player1_id").notNull().references(() => users.id),
   player2Id: varchar("player2_id").references(() => users.id),
+  reportedWinnerId: varchar("reported_winner_id").references(() => users.id),
   winnerId: varchar("winner_id").references(() => users.id),
   spectatorCount: integer("spectator_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
