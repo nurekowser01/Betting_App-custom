@@ -1,8 +1,8 @@
 import { db } from "./db";
 import { eq, and, desc, or, gte } from "drizzle-orm";
 import { 
-  users, wallets, matches, spectatorBets, transactions,
-  type User, type Wallet, type Match, type SpectatorBet, type Transaction,
+  users, wallets, matches, spectatorBets, transactions, cryptoPayments,
+  type User, type Wallet, type Match, type SpectatorBet, type Transaction, type CryptoPayment,
   type InsertUser, type UpsertUser
 } from "@shared/schema";
 import { randomUUID } from "crypto";
@@ -42,7 +42,12 @@ export interface IStorage {
   updateSpectatorBetStatus(id: string, status: 'won' | 'lost'): Promise<void>;
   
   getTransactionsByUserId(userId: string): Promise<Transaction[]>;
-  createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee', amount: string, description: string): Promise<Transaction>;
+  createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee' | 'crypto_deposit', amount: string, description: string): Promise<Transaction>;
+  
+  createCryptoPayment(userId: string, chargeId: string, chargeCode: string, hostedUrl: string, usdAmount: string): Promise<CryptoPayment>;
+  getCryptoPaymentByChargeId(chargeId: string): Promise<CryptoPayment | undefined>;
+  updateCryptoPaymentStatus(chargeId: string, status: 'pending' | 'completed' | 'expired' | 'cancelled', cryptoCurrency?: string, cryptoAmount?: string): Promise<CryptoPayment | undefined>;
+  getCryptoPaymentsByUserId(userId: string): Promise<CryptoPayment[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -293,7 +298,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(transactions).where(eq(transactions.userId, userId)).orderBy(desc(transactions.createdAt));
   }
 
-  async createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee', amount: string, description: string): Promise<Transaction> {
+  async createTransaction(userId: string, walletId: string, type: 'deposit' | 'withdrawal' | 'bet' | 'winnings' | 'escrow' | 'refund' | 'platform_fee' | 'crypto_deposit', amount: string, description: string): Promise<Transaction> {
     const [tx] = await db.insert(transactions).values({
       userId,
       walletId,
@@ -302,6 +307,42 @@ export class DatabaseStorage implements IStorage {
       description,
     }).returning();
     return tx;
+  }
+
+  async createCryptoPayment(userId: string, chargeId: string, chargeCode: string, hostedUrl: string, usdAmount: string): Promise<CryptoPayment> {
+    const [payment] = await db.insert(cryptoPayments).values({
+      userId,
+      chargeId,
+      chargeCode,
+      hostedUrl,
+      usdAmount,
+      status: "pending",
+    }).returning();
+    return payment;
+  }
+
+  async getCryptoPaymentByChargeId(chargeId: string): Promise<CryptoPayment | undefined> {
+    const [payment] = await db.select().from(cryptoPayments).where(eq(cryptoPayments.chargeId, chargeId));
+    return payment;
+  }
+
+  async updateCryptoPaymentStatus(chargeId: string, status: 'pending' | 'completed' | 'expired' | 'cancelled', cryptoCurrency?: string, cryptoAmount?: string): Promise<CryptoPayment | undefined> {
+    const updateData: any = { status };
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
+    }
+    if (cryptoCurrency) {
+      updateData.cryptoCurrency = cryptoCurrency;
+    }
+    if (cryptoAmount) {
+      updateData.cryptoAmount = cryptoAmount;
+    }
+    const [payment] = await db.update(cryptoPayments).set(updateData).where(eq(cryptoPayments.chargeId, chargeId)).returning();
+    return payment;
+  }
+
+  async getCryptoPaymentsByUserId(userId: string): Promise<CryptoPayment[]> {
+    return db.select().from(cryptoPayments).where(eq(cryptoPayments.userId, userId)).orderBy(desc(cryptoPayments.createdAt));
   }
 }
 

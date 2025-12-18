@@ -5,7 +5,8 @@ import { z } from "zod";
 
 export const walletTypeEnum = pgEnum('wallet_type', ['personal', 'escrow', 'spectator', 'platform']);
 export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pending_approval', 'completed', 'cancelled']);
-export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund', 'platform_fee']);
+export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund', 'platform_fee', 'crypto_deposit']);
+export const cryptoPaymentStatusEnum = pgEnum('crypto_payment_status', ['pending', 'completed', 'expired', 'cancelled']);
 export const betStatusEnum = pgEnum('bet_status', ['pending', 'won', 'lost']);
 
 // Session storage table for Replit Auth
@@ -72,6 +73,20 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const cryptoPayments = pgTable("crypto_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  chargeId: varchar("charge_id").notNull().unique(),
+  chargeCode: varchar("charge_code"),
+  hostedUrl: text("hosted_url"),
+  cryptoCurrency: varchar("crypto_currency"),
+  cryptoAmount: decimal("crypto_amount", { precision: 18, scale: 8 }),
+  usdAmount: decimal("usd_amount", { precision: 10, scale: 2 }).notNull(),
+  status: cryptoPaymentStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -107,6 +122,12 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   createdAt: true,
 });
 
+export const insertCryptoPaymentSchema = createInsertSchema(cryptoPayments).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -114,3 +135,4 @@ export type Wallet = typeof wallets.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type SpectatorBet = typeof spectatorBets.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
+export type CryptoPayment = typeof cryptoPayments.$inferSelect;
