@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, decimal, pgEnum, index, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -8,10 +8,23 @@ export const matchStatusEnum = pgEnum('match_status', ['waiting', 'live', 'pendi
 export const transactionTypeEnum = pgEnum('transaction_type', ['deposit', 'withdrawal', 'bet', 'winnings', 'escrow', 'refund', 'platform_fee']);
 export const betStatusEnum = pgEnum('bet_status', ['pending', 'won', 'lost']);
 
+// Session storage table for Replit Auth
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"),
+  email: varchar("email"),
+  profileImageUrl: varchar("profile_image_url"),
   isAdmin: integer("is_admin").notNull().default(0),
 });
 
@@ -63,6 +76,11 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
 });
 
+// For OAuth users (Replit Auth)
+export const upsertUserSchema = createInsertSchema(users).omit({
+  isAdmin: true,
+});
+
 export const insertWalletSchema = createInsertSchema(wallets).omit({
   id: true,
 });
@@ -89,6 +107,7 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Wallet = typeof wallets.$inferSelect;
 export type Match = typeof matches.$inferSelect;

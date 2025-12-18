@@ -62,6 +62,9 @@ export function setupAuth(app: Express) {
         if (!user) {
           return done(null, false, { message: "User not found" });
         }
+        if (!user.password) {
+          return done(null, false, { message: "Please use Google login for this account" });
+        }
         const isValid = await comparePassword(password, user.password);
         if (!isValid) {
           return done(null, false, { message: "Incorrect password" });

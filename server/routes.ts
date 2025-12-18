@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, requireAuth, hashPassword } from "./auth";
+import { setupReplitAuth } from "./replitAuth";
 import passport from "passport";
 import { insertUserSchema, insertMatchSchema, insertSpectatorBetSchema } from "@shared/schema";
 import { z } from "zod";
@@ -11,6 +12,8 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+  
+  await setupReplitAuth(app);
 
   // Auth routes
   app.post("/api/auth/register", async (req, res) => {
@@ -18,6 +21,10 @@ export async function registerRoutes(
       const parsed = insertUserSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid input", errors: parsed.error.errors });
+      }
+
+      if (!parsed.data.password) {
+        return res.status(400).json({ message: "Password is required" });
       }
 
       const existing = await storage.getUserByUsername(parsed.data.username);

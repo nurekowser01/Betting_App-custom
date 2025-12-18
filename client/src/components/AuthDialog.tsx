@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Gamepad2, Loader2 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Gamepad2, Loader2, Info } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -81,6 +83,39 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
           </TabsList>
         </Tabs>
 
+        <div className="space-y-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => window.location.href = "/api/login"}
+            data-testid="button-google-login"
+          >
+            <SiGoogle className="h-4 w-4 mr-2" />
+            Continue with Google
+          </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <Separator className="w-full" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or continue with username
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {tab === "register" && (
+          <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50 text-sm">
+            <Info className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+            <p className="text-muted-foreground">
+              We recommend using your PlayStation (PSN) or Xbox (Gamertag) username for easy identification during matches.
+            </p>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
@@ -88,7 +123,7 @@ export function AuthDialog({ open, onOpenChange }: AuthDialogProps) {
               id="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder={tab === "login" ? "Enter your username" : "Choose a username"}
+              placeholder={tab === "login" ? "Enter your username" : "e.g. YourPSN_ID or Gamertag"}
               data-testid="input-username"
               autoComplete="username"
             />

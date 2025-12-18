@@ -3,14 +3,16 @@ import { eq, and, desc, or, gte } from "drizzle-orm";
 import { 
   users, wallets, matches, spectatorBets, transactions,
   type User, type Wallet, type Match, type SpectatorBet, type Transaction,
-  type InsertUser
+  type InsertUser, type UpsertUser
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUserAdminLevel(userId: string, level: number): Promise<User | undefined>;
   
@@ -53,8 +55,46 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const existingById = await this.getUser(userData.id!);
+    if (existingById) {
+      const [user] = await db
+        .update(users)
+        .set({
+          email: userData.email,
+          profileImageUrl: userData.profileImageUrl,
+        })
+        .where(eq(users.id, userData.id!))
+        .returning();
+      return user;
+    }
+
+    let username = userData.username!;
+    let existingByUsername = await this.getUserByUsername(username);
+    let suffix = 1;
+    while (existingByUsername) {
+      username = `${userData.username}_${suffix}`;
+      existingByUsername = await this.getUserByUsername(username);
+      suffix++;
+    }
+
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...userData,
+        username,
+      })
+      .returning();
     return user;
   }
 
