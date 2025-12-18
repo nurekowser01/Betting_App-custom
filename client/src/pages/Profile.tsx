@@ -33,7 +33,7 @@ export default function Profile() {
       <Navbar 
         username={user?.username} 
         balance={parseFloat(personalWallet?.balance || "0")}
-        isAdmin={user?.isAdmin === 1}
+        isAdmin={user?.isAdmin !== undefined && user.isAdmin >= 1}
         onLogout={logout}
       />
 
@@ -46,10 +46,10 @@ export default function Profile() {
           </Avatar>
           <div className="text-center">
             <h1 className="text-2xl font-bold" data-testid="text-profile-username">{user?.username}</h1>
-            {user?.isAdmin === 1 && (
+            {user?.isAdmin !== undefined && user.isAdmin >= 1 && (
               <Badge variant="secondary" className="mt-2">
                 <Shield className="h-3 w-3 mr-1" />
-                Admin
+                {user.isAdmin === 2 ? "Super Admin" : "Admin"}
               </Badge>
             )}
           </div>

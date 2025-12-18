@@ -473,7 +473,7 @@ export async function registerRoutes(
   app.get("/api/admin/matches/pending", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
-      if (!user || user.isAdmin !== 1) {
+      if (!user || user.isAdmin < 1) {
         return res.status(403).json({ message: "Admin access required" });
       }
 
@@ -502,7 +502,7 @@ export async function registerRoutes(
   app.post("/api/admin/matches/:id/approve", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
-      if (!user || user.isAdmin !== 1) {
+      if (!user || user.isAdmin < 1) {
         return res.status(403).json({ message: "Admin access required" });
       }
 
@@ -582,7 +582,7 @@ export async function registerRoutes(
   app.post("/api/admin/matches/:id/reject", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
-      if (!user || user.isAdmin !== 1) {
+      if (!user || user.isAdmin < 1) {
         return res.status(403).json({ message: "Admin access required" });
       }
 
@@ -707,6 +707,89 @@ export async function registerRoutes(
       res.json(txs);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // Admin: Get live matches
+  app.get("/api/admin/matches/live", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 1) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const liveMatches = await storage.getLiveMatches();
+      
+      const enrichedMatches = await Promise.all(liveMatches.map(async (match) => {
+        const player1 = await storage.getUser(match.player1Id);
+        const player2 = match.player2Id ? await storage.getUser(match.player2Id) : null;
+        const spectatorBets = await storage.getSpectatorBetsByMatch(match.id);
+        return {
+          ...match,
+          player1: player1 ? { id: player1.id, username: player1.username } : null,
+          player2: player2 ? { id: player2.id, username: player2.username } : null,
+          totalSpectatorBets: spectatorBets.reduce((sum, bet) => sum + parseFloat(bet.amount), 0),
+        };
+      }));
+
+      res.json(enrichedMatches);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch live matches" });
+    }
+  });
+
+  // Admin: Get all users (super admin only)
+  app.get("/api/admin/users", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const allUsers = await storage.getAllUsers();
+      const usersWithoutPasswords = allUsers.map(({ password, ...rest }) => rest);
+      res.json(usersWithoutPasswords);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Admin: Update user admin level (super admin only)
+  app.post("/api/admin/users/:id/admin-level", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user || user.isAdmin < 2) {
+        return res.status(403).json({ message: "Super admin access required" });
+      }
+
+      const schema = z.object({
+        level: z.number().int().min(0).max(2),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input" });
+      }
+
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Cannot demote yourself
+      if (targetUser.id === user.id) {
+        return res.status(400).json({ message: "Cannot change your own admin level" });
+      }
+
+      const updatedUser = await storage.updateUserAdminLevel(req.params.id, parsed.data.level);
+      if (updatedUser) {
+        const { password, ...userWithoutPassword } = updatedUser;
+        res.json(userWithoutPassword);
+      } else {
+        res.status(500).json({ message: "Failed to update user" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update user admin level" });
     }
   });
 

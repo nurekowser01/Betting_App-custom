@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, or } from "drizzle-orm";
+import { eq, and, desc, or, gte } from "drizzle-orm";
 import { 
   users, wallets, matches, spectatorBets, transactions,
   type User, type Wallet, type Match, type SpectatorBet, type Transaction,
@@ -89,8 +89,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlatformWallet(): Promise<Wallet> {
-    // Get the first admin user's platform wallet, or create one
-    const [adminUser] = await db.select().from(users).where(eq(users.isAdmin, 1)).limit(1);
+    // Get any admin user's platform wallet (level 1 or 2), or create one
+    const [adminUser] = await db.select().from(users).where(gte(users.isAdmin, 1)).limit(1);
     
     if (!adminUser) {
       throw new Error("No admin user found for platform wallet");

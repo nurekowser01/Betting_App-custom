@@ -51,7 +51,7 @@ export default function TransactionHistory() {
       <Navbar 
         username={user?.username} 
         balance={parseFloat(personalWallet?.balance || "0")}
-        isAdmin={user?.isAdmin === 1}
+        isAdmin={user?.isAdmin !== undefined && user.isAdmin >= 1}
         onLogout={logout}
       />
 

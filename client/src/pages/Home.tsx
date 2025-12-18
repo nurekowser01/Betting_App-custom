@@ -258,7 +258,7 @@ export default function Home() {
       <Navbar 
         username={user?.username} 
         balance={totalBalance}
-        isAdmin={user?.isAdmin === 1}
+        isAdmin={user?.isAdmin !== undefined && user.isAdmin >= 1}
         onLogout={logout}
         onLogin={() => setAuthOpen(true)}
       />
