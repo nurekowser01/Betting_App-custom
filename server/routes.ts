@@ -12,8 +12,11 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
-  
-  await setupReplitAuth(app);
+
+  // Only setup OAuth if running on Replit (REPL_ID is set)
+  if (process.env.REPL_ID) {
+    await setupReplitAuth(app);
+  }
 
   // Auth routes
   app.post("/api/auth/register", async (req, res) => {
