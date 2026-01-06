@@ -9,7 +9,11 @@ import pg from "pg";
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-});
+  ssl: {
+    rejectUnauthorized: false,
+  },
+  family: 4,
+} as unknown as pg.PoolConfig);
 
 const SALT_ROUNDS = 10;
 
@@ -46,7 +50,7 @@ export function setupAuth(app: Express) {
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: false,
+        secure: process.env.NODE_ENV === "production",
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         sameSite: "lax",

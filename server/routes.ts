@@ -13,6 +13,58 @@ export async function registerRoutes(
 ): Promise<Server> {
   setupAuth(app);
 
+  // ======= ADD THIS AUTO-LOGIN CODE =======
+  console.log("🔧 Checking DEV_AUTO_LOGIN:", process.env.DEV_AUTO_LOGIN);
+  
+  if (process.env.DEV_AUTO_LOGIN === "true") {
+    console.log("🚀 DEV_AUTO_LOGIN ENABLED - Auto-logging in demo user");
+    
+    app.use(async (req, res, next) => {
+      console.log("🔍 Checking authentication for:", req.path);
+      
+      try {
+        if (!req.isAuthenticated || !req.isAuthenticated()) {
+          console.log("👤 Creating demo user...");
+          const demoId = "dev_local_user";
+          const demoUser = await storage.upsertUser({
+            id: demoId,
+            username: "dev",
+            email: "dev@example.com",
+            profileImageUrl: null,
+          });
+
+          const existingWallets = await storage.getWalletsByUserId(demoUser.id);
+          if (existingWallets.length === 0) {
+            await storage.createWallet(demoUser.id, "personal");
+            await storage.createWallet(demoUser.id, "escrow");
+            await storage.createWallet(demoUser.id, "spectator");
+          }
+
+          // attach session user
+          req.login(
+            { 
+              id: demoUser.id, 
+              username: demoUser.username, 
+              gamerUsername: demoUser.gamerUsername, 
+              isAdmin: demoUser.isAdmin 
+            },
+            (err: any) => {
+              // ignore login errors for dev auto-login
+              console.log("✅ Demo user logged in");
+              next();
+            },
+          );
+        } else {
+          console.log("✅ User already authenticated");
+          next();
+        }
+      } catch (err) {
+        console.error("Auto-login error:", err);
+        next();
+      }
+    });
+  }
+
   // Only setup OAuth if running on Replit (REPL_ID is set)
   if (process.env.REPL_ID) {
     await setupReplitAuth(app);
