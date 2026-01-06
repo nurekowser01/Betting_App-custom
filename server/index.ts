@@ -60,6 +60,28 @@ app.use((req, res, next) => {
   next();
 });
 
+// Add this before registerRoutes
+app.get('/health', async (req, res) => {
+  try {
+    // Simple database test
+    const db = require('./db').db; // Adjust based on your db file
+    const result = await db.execute('SELECT 1 as test');
+    res.json({ 
+      status: 'healthy', 
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Database connection error:', error);
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      database: 'disconnected',
+      error: error,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 (async () => {
   await registerRoutes(httpServer, app);
 

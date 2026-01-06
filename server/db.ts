@@ -4,6 +4,10 @@ import * as schema from "@shared/schema";
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false  // Required for Supabase
+  },
+  family: 4,  // Force IPv4 connection
 });
 
 export const db = drizzle(pool, { schema });
